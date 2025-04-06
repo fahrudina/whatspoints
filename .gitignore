@@ -1,0 +1,36 @@
+# Binaries
+wa-serv
+
+# Dependency directories
+vendor/
+
+# Logs and debugging
+*.log
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+
+# Build artifacts
+*.out
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.old
+
+# SQLite database
+whatsappdata.db

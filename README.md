@@ -8,6 +8,7 @@ This repository provides a sample implementation using the [Whatsmeow](https://g
 - Receipt upload handling via WhatsApp messages.
 - Point calculation logic based on uploaded receipt data.
 - Configurable database connection for storing and retrieving data.
+- Centralized environment variable management.
 
 ## Installation
 
@@ -23,7 +24,7 @@ go mod tidy
 
 ### Running Locally
 
-1. Set up the required environment variables for database configuration (see below).
+1. Set up the required environment variables (see below).
 2. Run the application:
 
 ```bash
@@ -49,22 +50,26 @@ docker run -d --name wa-serv -p 8080:8080 \
   -e DB_USERNAME=your_db_username \
   -e DB_PASSWORD=your_db_password \
   -e DB_NAME=your_db_name \
+  -e AWS_REGION=your_aws_region \
+  -e S3_BUCKET_NAME=your_s3_bucket_name \
   wa-serv
 ```
 
-Replace `your_db_host`, `your_db_port`, `your_db_username`, `your_db_password`, and `your_db_name` with your database configuration.
+Replace `your_db_host`, `your_db_port`, `your_db_username`, `your_db_password`, `your_db_name`, `your_aws_region`, and `your_s3_bucket_name` with your configuration.
 
 ## Environment Variables
 
-The following environment variables are used for database configuration:
+The following environment variables are used for configuration:
 
-| Variable      | Default Value   | Description                  |
-|---------------|-----------------|------------------------------|
-| `DB_HOST`     | `localhost`     | Database host                |
-| `DB_PORT`     | `3306`          | Database port                |
-| `DB_USERNAME` | `wa_serv`       | Database username            |
-| `DB_PASSWORD` | `password`      | Database password            |
-| `DB_NAME`     | `db_name`       | Database name                |
+| Variable         | Default Value   | Description                              |
+|------------------|-----------------|------------------------------------------|
+| `DB_HOST`        | `localhost`     | Database host                            |
+| `DB_PORT`        | `3306`          | Database port                            |
+| `DB_USERNAME`    | `user`          | Database username                        |
+| `DB_PASSWORD`    | `password`      | Database password                        |
+| `DB_NAME`        | `wa_serv_db`    | Database name                            |
+| `AWS_REGION`     | (required)      | AWS region for S3                        |
+| `S3_BUCKET_NAME` | (required)      | S3 bucket name for storing receipt images |
 
 ## Example
 
@@ -86,9 +91,6 @@ The following features are planned for future implementation:
 - Handle inquiries to check earned points from users.
 - Handle point redemption.
 
-## Development Notes
-
-This implementation was assisted by GitHub Copilot to create and refine the use case. The initial setup and implementation were completed in less than 8 working hours.
 
 ## Contributing
 

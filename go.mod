@@ -3,8 +3,10 @@ module github.com/wa-serv
 go 1.23.1
 
 require (
+	github.com/aws/aws-sdk-go v1.55.6
 	github.com/go-sql-driver/mysql v1.9.1
-	github.com/mattn/go-sqlite3 v1.14.27
+	github.com/google/uuid v1.6.0
+	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/mdp/qrterminal/v3 v3.2.1
 	go.mau.fi/whatsmeow v0.0.0-20250402091807-b0caa1b76088
 	google.golang.org/protobuf v1.36.6
@@ -12,8 +14,8 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/rs/zerolog v1.33.0 // indirect
