@@ -6,20 +6,15 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/wa-serv/config"
 	"github.com/wa-serv/repository"
 )
-
-// AllowedPhoneNumbers is a list of phone numbers allowed to perform this action
-var AllowedPhoneNumbers = map[string]bool{
-	"6281280272326": true, // Add allowed phone numbers here
-	"0987654321":    true,
-}
 
 // ProcessUpsertPoints handles the upsert points action
 func ProcessUpsertPoints(db *sql.DB, senderPhoneNumber, input string) error {
 	senderPhoneNumber = extractPhoneNumber(senderPhoneNumber)
 	// Check if the sender is allowed to perform this action
-	if !AllowedPhoneNumbers[senderPhoneNumber] {
+	if !config.Env.AllowedPhoneNumbers[senderPhoneNumber] {
 		return errors.New("unauthorized action: phone number not allowed")
 	}
 
