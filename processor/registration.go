@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/wa-serv/database"
+	"github.com/wa-serv/repository"
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
 	"go.mau.fi/whatsmeow/types"
@@ -41,7 +41,7 @@ func ProcessRegistration(client *whatsmeow.Client, db *sql.DB, message string, s
 	phoneNumber := extractPhoneNumber(senderJID)
 
 	// Check if user is already registered
-	isRegistered, err := database.IsMemberRegistered(db, phoneNumber)
+	isRegistered, err := repository.IsMemberRegistered(db, phoneNumber)
 	if err != nil {
 		sendResponse(client, senderJID, "Terjadi kesalahan saat memeriksa registrasi.")
 		return err
@@ -53,7 +53,7 @@ func ProcessRegistration(client *whatsmeow.Client, db *sql.DB, message string, s
 	}
 
 	// Register the member
-	err = database.RegisterMember(db, name, address, phoneNumber)
+	err = repository.RegisterMember(db, name, address, phoneNumber)
 	if err != nil {
 		sendResponse(client, senderJID, "Gagal mendaftarkan anggota. Silakan coba lagi.")
 		return err
