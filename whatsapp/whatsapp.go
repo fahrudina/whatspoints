@@ -91,3 +91,27 @@ func handleEvent(evt interface{}, db *sql.DB, client *whatsmeow.Client) {
 func (c *Client) Disconnect() {
 	c.whatsmeowClient.Disconnect()
 }
+
+func ClearAllSessions() error {
+	// Connect to the same SQLite database
+	dbLog := waLog.Stdout("Database", "DEBUG", true)
+	container, err := sqlstore.New("sqlite3", "file:whatsappdata.db?_foreign_keys=on", dbLog)
+	if err != nil {
+		return fmt.Errorf("failed to connect to SQLite database: %v", err)
+	}
+
+	// Get all devices
+	devices, err := container.GetAllDevices()
+	if err != nil {
+		return fmt.Errorf("failed to get devices: %v", err)
+	}
+
+	// Delete each device
+	for _, device := range devices {
+		if err := container.DeleteDevice(device); err != nil {
+			return fmt.Errorf("failed to delete device %s: %v", device.ID, err)
+		}
+	}
+
+	return nil
+}

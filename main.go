@@ -2,11 +2,13 @@ package main
 
 import (
 	"database/sql"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
+	_ "github.com/go-sql-driver/mysql" // MySQL driver
 	"github.com/wa-serv/config"
 	"github.com/wa-serv/database"
 	"github.com/wa-serv/whatsapp"
@@ -16,6 +18,19 @@ import (
 var db *sql.DB
 
 func main() {
+
+	clearSessions := flag.Bool("clear-sessions", false, "Clear all WhatsApp sessions")
+	flag.Parse()
+
+	if *clearSessions {
+		if err := whatsapp.ClearAllSessions(); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to clear sessions: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("All WhatsApp sessions cleared successfully")
+		os.Exit(0)
+	}
+
 	// Load environment variables
 	config.LoadEnv()
 	fmt.Println("Environment variables loaded successfully")
@@ -61,6 +76,31 @@ func initializeDatabase() {
 		fmt.Fprintf(os.Stderr, "Failed to initialize images table: %v\n", err)
 		os.Exit(1)
 	}
+	if err := database.InitPointsTable(db); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize points table: %v\n", err)
+		os.Exit(1)
+	}
+	if err := database.InitReceiptsTable(db); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize receipts table: %v\n", err)
+		os.Exit(1)
+	}
+	if err := database.InitPointTransactionsTable(db); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize transactions table: %v\n", err)
+		os.Exit(1)
+	}
+	if err := database.InitItemsTable(db); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize items table: %v\n", err)
+		os.Exit(1)
+	}
+	if err := database.InitOrdersTable(db); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize orders table: %v\n", err)
+		os.Exit(1)
+	}
+	if err := database.InitOrderItemsTable(db); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize order_items table: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("All tables initialized successfully")
 }
 
 func waitForTermination(client *whatsapp.Client) {

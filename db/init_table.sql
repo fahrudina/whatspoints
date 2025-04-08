@@ -11,7 +11,7 @@ CREATE TABLE members (
 -- Table: points
 CREATE TABLE points (
     point_id INT PRIMARY KEY AUTO_INCREMENT,
-    member_id INT,
+    member_id INT UNIQUE, -- Set member_id as unique
     accumulated_points INT,
     current_points INT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -57,4 +57,40 @@ CREATE TABLE images (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (member_id) REFERENCES members(member_id)
+);
+
+-- Table: orders
+CREATE TABLE orders (
+    order_id INT PRIMARY KEY AUTO_INCREMENT,
+    member_id INT,
+    total_price DECIMAL(10, 2),
+    order_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (member_id) REFERENCES members(member_id)
+);
+
+-- Table: items
+CREATE TABLE items (
+    item_id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    price_per_unit DECIMAL(10, 2) DEFAULT 0.00,
+    price_per_kilo DECIMAL(10, 2) DEFAULT 0.00,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Table: order_items
+CREATE TABLE order_items (
+    order_item_id INT PRIMARY KEY AUTO_INCREMENT,
+    order_id INT,
+    item_id INT,
+    total_kilo DECIMAL(10, 2) DEFAULT 0.00, -- Quantity in kilograms
+    total_unit INT DEFAULT 0, -- Quantity in units
+    price DECIMAL(10, 2),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES orders(order_id),
+    FOREIGN KEY (item_id) REFERENCES items(item_id)
 );

@@ -5,30 +5,6 @@ import (
 	"fmt"
 )
 
-// SaveImageURL saves the image URL to the database
-func SaveImageURL(db *sql.DB, memberID int, imageURL string) error {
-	query := "INSERT INTO images (member_id, image_url) VALUES (?, ?)"
-	_, err := db.Exec(query, memberID, imageURL)
-	if err != nil {
-		return fmt.Errorf("failed to save image URL: %w", err)
-	}
-	return nil
-}
-
-// GetMemberIDByPhoneNumber retrieves the member_id for a given phone number
-func GetMemberIDByPhoneNumber(db *sql.DB, phoneNumber string) (int, error) {
-	var memberID int
-	query := "SELECT member_id FROM members WHERE phone_number = ?"
-	err := db.QueryRow(query, phoneNumber).Scan(&memberID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return 0, fmt.Errorf("no member found with phone number: %s", phoneNumber)
-		}
-		return 0, fmt.Errorf("failed to retrieve member ID: %w", err)
-	}
-	return memberID, nil
-}
-
 // InitImageTable initializes the images table
 func InitImageTable(db *sql.DB) error {
 	query := `
@@ -93,7 +69,7 @@ func InitPointsTable(db *sql.DB) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS points (
 		point_id INT AUTO_INCREMENT PRIMARY KEY,
-		member_id INT,
+		member_id INT UNIQUE, -- Set member_id as unique
 		accumulated_points INT,
 		current_points INT,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -126,6 +102,66 @@ func InitPointTransactionsTable(db *sql.DB) error {
 	_, err := db.Exec(query)
 	if err != nil {
 		return fmt.Errorf("failed to create point_transactions table: %w", err)
+	}
+	return nil
+}
+
+// InitItemsTable initializes the items table
+func InitItemsTable(db *sql.DB) error {
+	query := `
+	CREATE TABLE IF NOT EXISTS items (
+		item_id INT AUTO_INCREMENT PRIMARY KEY,
+		name VARCHAR(100) NOT NULL,
+		description TEXT,
+		price_per_unit DECIMAL(10, 2) DEFAULT 0.00,
+		price_per_kilo DECIMAL(10, 2) DEFAULT 0.00,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+	)`
+	_, err := db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to create items table: %w", err)
+	}
+	return nil
+}
+
+// InitOrderItemsTable initializes the order_items table
+func InitOrderItemsTable(db *sql.DB) error {
+	query := `
+	CREATE TABLE IF NOT EXISTS order_items (
+		order_item_id INT AUTO_INCREMENT PRIMARY KEY,
+		order_id INT,
+		item_id INT,
+		total_kilo DECIMAL(10, 2) DEFAULT 0.00,
+		total_unit INT DEFAULT 0,
+		price DECIMAL(10, 2),
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		FOREIGN KEY (order_id) REFERENCES orders(order_id),
+		FOREIGN KEY (item_id) REFERENCES items(item_id)
+	)`
+	_, err := db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to create order_items table: %w", err)
+	}
+	return nil
+}
+
+// InitOrdersTable initializes the orders table
+func InitOrdersTable(db *sql.DB) error {
+	query := `
+	CREATE TABLE IF NOT EXISTS orders (
+		order_id INT AUTO_INCREMENT PRIMARY KEY,
+		member_id INT,
+		total_price DECIMAL(10, 2),
+		order_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		FOREIGN KEY (member_id) REFERENCES members(member_id)
+	)`
+	_, err := db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to create orders table: %w", err)
 	}
 	return nil
 }
