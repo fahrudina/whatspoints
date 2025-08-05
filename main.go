@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq" // PostgreSQL driver for Supabase
 	"github.com/wa-serv/api"
@@ -66,40 +65,24 @@ func initializeDatabase() {
 	}
 
 	// Supabase Transaction Pooler connection string
-	connectionString := fmt.Sprintf(
-		"postgresql://%s:%s@%s:%s/%s?sslmode=%s",
-		os.Getenv("DB_USER"),
-		os.Getenv("DB_PASSWORD"),
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_PORT"),
-		os.Getenv("DB_NAME"),
-		os.Getenv("DB_SSLMODE"),
-	)
+	connectionString := database.BuildPostgresConnectionString()
 
 	fmt.Printf("Connecting to Supabase Transaction Pooler...\n")
 
-	// Connect using pgx
-	conn, err := pgx.Connect(context.Background(), connectionString)
+	// Connect directly with sql.DB
+	db, err = sql.Open("postgres", connectionString)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to connect to Supabase (Postgres) database: %v\n", err)
 		os.Exit(1)
 	}
-	defer conn.Close(context.Background())
 
 	// Test the connection
-	if err := conn.Ping(context.Background()); err != nil {
+	if err := db.Ping(); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to ping Supabase (Postgres) database: %v\n", err)
 		os.Exit(1)
 	}
 
 	fmt.Println("Successfully connected to Supabase Transaction Pooler")
-
-	// Convert pgx connection to sql.DB for compatibility with existing code
-	db, err = sql.Open("postgres", connectionString)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to open SQL database connection: %v\n", err)
-		os.Exit(1)
-	}
 
 	// Test the sql.DB connection
 	if err := db.Ping(); err != nil {

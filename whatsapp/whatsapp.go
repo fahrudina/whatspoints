@@ -10,6 +10,7 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq" // PostgreSQL driver for Supabase
 	"github.com/mdp/qrterminal/v3"
+	"github.com/wa-serv/database"
 	"github.com/wa-serv/handlers"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store/sqlstore"
@@ -34,14 +35,7 @@ func InitializeWhatsAppClient(db *sql.DB) *Client {
 	}
 
 	// Build Supabase PostgreSQL connection string for WhatsApp session storage
-	connectionString := fmt.Sprintf(
-		"postgresql://%s:%s@%s:%s/%s?sslmode=require",
-		os.Getenv("DB_USER"),
-		os.Getenv("DB_PASSWORD"),
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_PORT"),
-		os.Getenv("DB_NAME"),
-	)
+	connectionString := database.BuildPostgresConnectionString()
 
 	fmt.Printf("Connecting WhatsApp client to Supabase PostgreSQL...\n")
 
@@ -125,14 +119,7 @@ func ClearAllSessions() error {
 	}
 
 	// Build Supabase PostgreSQL connection string
-	connectionString := fmt.Sprintf(
-		"postgresql://%s:%s@%s:%s/%s?sslmode=require",
-		os.Getenv("DB_USER"),
-		os.Getenv("DB_PASSWORD"),
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_PORT"),
-		os.Getenv("DB_NAME"),
-	)
+	connectionString := database.BuildPostgresConnectionString()
 
 	// Connect to the same Supabase PostgreSQL database
 	dbLog := waLog.Stdout("Database", "DEBUG", true)

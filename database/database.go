@@ -3,7 +3,30 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"os"
 )
+
+// BuildPostgresConnectionString builds a PostgreSQL connection string from environment variables
+func BuildPostgresConnectionString() string {
+	return fmt.Sprintf(
+		"postgresql://%s:%s@%s:%s/%s?sslmode=%s",
+		os.Getenv("SUPABASE_USER"),
+		os.Getenv("SUPABASE_PASSWORD"),
+		os.Getenv("SUPABASE_HOST"),
+		os.Getenv("SUPABASE_PORT"),
+		os.Getenv("SUPABASE_DB"),
+		getSSLMode(),
+	)
+}
+
+// getSSLMode returns the SSL mode from environment variable or default
+func getSSLMode() string {
+	sslMode := os.Getenv("SUPABASE_SSLMODE")
+	if sslMode == "" {
+		return "require"
+	}
+	return sslMode
+}
 
 // InitImageTable initializes the images table
 func InitImageTable(db *sql.DB) error {
