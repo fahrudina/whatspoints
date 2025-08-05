@@ -11,6 +11,7 @@ type EnvConfig struct {
 	DBUsername          string
 	DBPassword          string
 	DBName              string
+	DBSSLMode           string // Add SSL mode for Supabase
 	AWSRegion           string
 	S3BucketName        string
 	AllowedPhoneNumbers map[string]bool
@@ -22,11 +23,12 @@ var Env EnvConfig
 // LoadEnv loads and validates all required environment variables
 func LoadEnv() {
 	Env = EnvConfig{
-		DBHost:              getEnv("DB_HOST", "localhost"),
-		DBPort:              getEnv("DB_PORT", "3306"),
-		DBUsername:          getEnv("DB_USERNAME", "username"),
-		DBPassword:          getEnv("DB_PASSWORD", "password"),
-		DBName:              getEnv("DB_NAME", "wa_serv_db"),
+		DBHost:              getEnv("SUPABASE_HOST", ""),
+		DBPort:              getEnv("SUPABASE_PORT", "5432"),
+		DBUsername:          getEnv("SUPABASE_USER", ""),
+		DBPassword:          getEnv("SUPABASE_PASSWORD", ""),
+		DBName:              getEnv("SUPABASE_DB", ""),
+		DBSSLMode:           getEnv("SUPABASE_SSLMODE", "require"),
 		AWSRegion:           getEnv("AWS_REGION", ""),
 		S3BucketName:        getEnv("S3_BUCKET_NAME", ""),
 		AllowedPhoneNumbers: parseAllowedPhoneNumbers(getEnv("ALLOWED_PHONE_NUMBERS", "")),

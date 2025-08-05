@@ -4,10 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 
-	_ "github.com/mattn/go-sqlite3" // SQLite driver
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq" // PostgreSQL driver for Supabase
 	"github.com/mdp/qrterminal/v3"
+	"github.com/wa-serv/database"
 	"github.com/wa-serv/handlers"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store/sqlstore"
@@ -19,16 +22,32 @@ type Client struct {
 	whatsmeowClient *whatsmeow.Client
 }
 
+// GetWhatsmeowClient returns the underlying whatsmeow client
+func (c *Client) GetWhatsmeowClient() *whatsmeow.Client {
+	return c.whatsmeowClient
+}
+
 func InitializeWhatsAppClient(db *sql.DB) *Client {
-	// Set up database connection for storing session data
-	dbLog := waLog.Stdout("Database", "DEBUG", true)
-	container, err := sqlstore.New("sqlite3", "file:whatsappdata.db?_foreign_keys=on", dbLog)
+	// Load environment variables from .env file
+	err := godotenv.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to connect to SQLite database: %v\n", err)
+		log.Fatal("Error loading .env file:", err)
+	}
+
+	// Build Supabase PostgreSQL connection string for WhatsApp session storage
+	connectionString := database.BuildPostgresConnectionString()
+
+	fmt.Printf("Connecting WhatsApp client to Supabase PostgreSQL...\n")
+
+	// Set up database connection for storing WhatsApp session data using Supabase PostgreSQL
+	dbLog := waLog.Stdout("Database", "DEBUG", true)
+	container, err := sqlstore.New(context.Background(), "postgres", connectionString, dbLog)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to connect to Supabase PostgreSQL database for WhatsApp sessions: %v\n", err)
 		os.Exit(1)
 	}
 
-	deviceStore, err := container.GetFirstDevice()
+	deviceStore, err := container.GetFirstDevice(context.Background())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to get device: %v\n", err)
 		os.Exit(1)
@@ -93,22 +112,31 @@ func (c *Client) Disconnect() {
 }
 
 func ClearAllSessions() error {
-	// Connect to the same SQLite database
-	dbLog := waLog.Stdout("Database", "DEBUG", true)
-	container, err := sqlstore.New("sqlite3", "file:whatsappdata.db?_foreign_keys=on", dbLog)
+	// Load environment variables from .env file
+	err := godotenv.Load()
 	if err != nil {
-		return fmt.Errorf("failed to connect to SQLite database: %v", err)
+		return fmt.Errorf("error loading .env file: %v", err)
+	}
+
+	// Build Supabase PostgreSQL connection string
+	connectionString := database.BuildPostgresConnectionString()
+
+	// Connect to the same Supabase PostgreSQL database
+	dbLog := waLog.Stdout("Database", "DEBUG", true)
+	container, err := sqlstore.New(context.Background(), "postgres", connectionString, dbLog)
+	if err != nil {
+		return fmt.Errorf("failed to connect to Supabase PostgreSQL database: %v", err)
 	}
 
 	// Get all devices
-	devices, err := container.GetAllDevices()
+	devices, err := container.GetAllDevices(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to get devices: %v", err)
 	}
 
 	// Delete each device
 	for _, device := range devices {
-		if err := container.DeleteDevice(device); err != nil {
+		if err := container.DeleteDevice(context.Background(), device); err != nil {
 			return fmt.Errorf("failed to delete device %s: %v", device.ID, err)
 		}
 	}

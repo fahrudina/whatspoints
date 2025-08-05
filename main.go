@@ -1,14 +1,20 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"flag"
 	"fmt"
+	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
-	_ "github.com/go-sql-driver/mysql" // MySQL driver
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq" // PostgreSQL driver for Supabase
+	"github.com/wa-serv/api"
 	"github.com/wa-serv/config"
 	"github.com/wa-serv/database"
 	"github.com/wa-serv/whatsapp"
@@ -16,6 +22,7 @@ import (
 
 // Global variables
 var db *sql.DB
+var httpServer *http.Server
 
 func main() {
 
@@ -41,31 +48,47 @@ func main() {
 
 	// Initialize WhatsApp client
 	client := whatsapp.InitializeWhatsAppClient(db)
+	fmt.Println("WhatsApp client initialized successfully")
+
+	// Start API server
+	startAPIServer(client)
 
 	// Listen for termination signals
 	waitForTermination(client)
 }
 
 func initializeDatabase() {
-	// Get database configuration from loaded environment variables
-	dbConfig := config.Env
-
-	// Open MySQL database connection
-	var err error
-	db, err = sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%s)/%s",
-		dbConfig.DBUsername, dbConfig.DBPassword, dbConfig.DBHost, dbConfig.DBPort, dbConfig.DBName))
+	// Load environment variables from .env file
+	err := godotenv.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to open MySQL database connection: %v\n", err)
+		log.Fatal("Error loading .env file:", err)
+	}
+
+	// Supabase Transaction Pooler connection string
+	connectionString := database.BuildPostgresConnectionString()
+
+	fmt.Printf("Connecting to Supabase Transaction Pooler...\n")
+
+	// Connect directly with sql.DB
+	db, err = sql.Open("postgres", connectionString)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to connect to Supabase (Postgres) database: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Test the connection
 	if err := db.Ping(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to ping MySQL database: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to ping Supabase (Postgres) database: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Println("Successfully connected to MySQL database")
+	fmt.Println("Successfully connected to Supabase Transaction Pooler")
+
+	// Test the sql.DB connection
+	if err := db.Ping(); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to ping SQL database: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Initialize tables
 	if err := database.InitMemberTable(db); err != nil {
@@ -103,13 +126,74 @@ func initializeDatabase() {
 	fmt.Println("All tables initialized successfully")
 }
 
+func startAPIServer(client *whatsapp.Client) {
+	// Get API configuration from environment variables
+	port := os.Getenv("API_PORT")
+	if port == "" {
+		port = "8080" // Default port
+	}
+
+	username := os.Getenv("API_USERNAME")
+	if username == "" {
+		username = "admin" // Default username
+	}
+
+	password := os.Getenv("API_PASSWORD")
+	if password == "" {
+		log.Fatal("API_PASSWORD environment variable is required")
+	}
+
+	// Create API server using clean architecture
+	apiServer := api.NewAPIServer(db, client.GetWhatsmeowClient(), username, password, port)
+
+	// Start server in a goroutine
+	go func() {
+		fmt.Printf("Starting API server on port %s...\n", port)
+		fmt.Printf("API endpoints:\n")
+		fmt.Printf("  POST /api/send-message - Send WhatsApp message\n")
+		fmt.Printf("  GET  /api/status       - Get service status\n")
+		fmt.Printf("  GET  /health           - Health check\n")
+		fmt.Printf("Basic Auth: %s / %s\n", username, "***")
+
+		if err := apiServer.Start(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to start API server: %v", err)
+		}
+	}()
+
+	// Store reference for graceful shutdown
+	httpServer = &http.Server{}
+}
+
 func waitForTermination(client *whatsapp.Client) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	<-c
 
-	client.Disconnect()
+	fmt.Println("\nShutting down gracefully...")
+
+	// Shutdown API server
+	if httpServer != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := httpServer.Shutdown(ctx); err != nil {
+			log.Printf("Failed to shutdown API server: %v", err)
+		} else {
+			fmt.Println("API server stopped")
+		}
+	}
+
+	// Disconnect WhatsApp client
+	if client != nil {
+		client.Disconnect()
+		fmt.Println("WhatsApp client disconnected")
+	}
+
+	// Close database connection
 	if db != nil {
 		db.Close()
+		fmt.Println("Database connection closed")
 	}
+
+	fmt.Println("Shutdown complete")
 }
