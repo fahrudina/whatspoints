@@ -116,7 +116,7 @@ func handleMediaMessage(evt *events.Message, db *sql.DB, client *whatsmeow.Clien
 	if imageMessage != nil {
 		fmt.Printf("Received an image message from %s\n", evt.Info.Sender.String())
 
-		data, err := client.Download(imageMessage)
+		data, err := client.Download(context.Background(), imageMessage)
 		if err != nil {
 			fmt.Printf("Failed to download image: %v\n", err)
 			return
