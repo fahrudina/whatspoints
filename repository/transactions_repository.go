@@ -9,8 +9,8 @@ func InsertPointTransaction(exec Executor, memberID, pointsChanged int, transact
 	query := `
 	INSERT INTO point_transactions (point_id, points_changed, transaction_type, transaction_date, notes)
 	VALUES (
-		(SELECT point_id FROM points WHERE member_id = ?),
-		?, ?, NOW(), ?
+		(SELECT point_id FROM points WHERE member_id = $1),
+		$2, $3, CURRENT_TIMESTAMP, $4
 	)
 	`
 	_, err := exec.Exec(query, memberID, pointsChanged, transactionType, notes)

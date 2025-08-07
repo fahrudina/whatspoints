@@ -88,7 +88,7 @@ func upsertPointsWithTransaction(db *sql.DB, memberID, currentPoints int) error 
 // GetCurrentPoints retrieves the current points for a member by their ID
 func GetCurrentPoints(db *sql.DB, memberID int) (int, error) {
 	var currentPoints int
-	query := "SELECT current_points FROM points WHERE member_id = ?"
+	query := "SELECT current_points FROM points WHERE member_id = $1"
 	err := db.QueryRow(query, memberID).Scan(&currentPoints)
 	if err != nil {
 		if err == sql.ErrNoRows {
