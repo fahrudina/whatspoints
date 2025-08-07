@@ -123,6 +123,13 @@ func initializeDatabase() {
 		fmt.Fprintf(os.Stderr, "Failed to initialize order_items table: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Initialize Whatsmeow session storage tables
+	if err := database.InitWhatsmeowTables(db); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize Whatsmeow tables: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("Whatsmeow session storage tables initialized successfully")
 	fmt.Println("All tables initialized successfully")
 }
 
