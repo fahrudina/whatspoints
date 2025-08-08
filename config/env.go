@@ -1,8 +1,11 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strings"
+
+	"github.com/joho/godotenv"
 )
 
 type EnvConfig struct {
@@ -22,6 +25,13 @@ var Env EnvConfig
 
 // LoadEnv loads and validates all required environment variables
 func LoadEnv() {
+	// Load environment variables from .env file
+	err := godotenv.Load()
+	if err != nil {
+		// Don't panic if .env file doesn't exist, just log a warning
+		log.Printf("Warning: .env file not found, using system environment variables: %v", err)
+	}
+
 	Env = EnvConfig{
 		DBHost:              getEnv("SUPABASE_HOST", ""),
 		DBPort:              getEnv("SUPABASE_PORT", "5432"),
@@ -34,12 +44,13 @@ func LoadEnv() {
 		AllowedPhoneNumbers: parseAllowedPhoneNumbers(getEnv("ALLOWED_PHONE_NUMBERS", "")),
 	}
 
-	// Validate required environment variables
-	if Env.AWSRegion == "" {
-		panic("AWS_REGION environment variable is required but not set")
+	// Only validate AWS variables if they are actually needed (when S3 functionality is used)
+	// For now, we'll make them optional to allow the app to start without AWS configuration
+	if Env.AWSRegion != "" && Env.S3BucketName == "" {
+		log.Printf("Warning: AWS_REGION is set but S3_BUCKET_NAME is missing. S3 functionality may not work properly.")
 	}
-	if Env.S3BucketName == "" {
-		panic("S3_BUCKET_NAME environment variable is required but not set")
+	if Env.S3BucketName != "" && Env.AWSRegion == "" {
+		log.Printf("Warning: S3_BUCKET_NAME is set but AWS_REGION is missing. S3 functionality may not work properly.")
 	}
 }
 

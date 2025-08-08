@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq" // PostgreSQL driver for Supabase
 	"github.com/wa-serv/api"
 	"github.com/wa-serv/config"
@@ -58,18 +57,13 @@ func main() {
 }
 
 func initializeDatabase() {
-	// Load environment variables from .env file
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file:", err)
-	}
-
 	// Supabase Transaction Pooler connection string
 	connectionString := database.BuildPostgresConnectionString()
 
 	fmt.Printf("Connecting to Supabase Transaction Pooler...\n")
 
 	// Connect directly with sql.DB
+	var err error
 	db, err = sql.Open("postgres", connectionString)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to connect to Supabase (Postgres) database: %v\n", err)
