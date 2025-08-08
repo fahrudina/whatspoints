@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/wa-serv/internal/domain"
 )
@@ -46,8 +47,12 @@ func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessag
 		}, domain.ErrInvalidPhoneNumber
 	}
 
+	// Create a context with timeout to prevent hanging
+	sendCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	// Send message
-	message, err := s.whatsappRepo.SendMessage(ctx, formattedPhone, req.Message)
+	message, err := s.whatsappRepo.SendMessage(sendCtx, formattedPhone, req.Message)
 	if err != nil {
 		return &domain.SendMessageResponse{
 			Success: false,
@@ -102,14 +107,19 @@ func (s *messageService) formatPhoneNumber(phone string) (string, error) {
 	phone = strings.ReplaceAll(phone, "(", "")
 	phone = strings.ReplaceAll(phone, ")", "")
 
-	// Ensure it starts with +
-	if !strings.HasPrefix(phone, "+") {
-		phone = "+" + phone
+	// Remove + if present since WhatsApp JIDs don't use +
+	phone = strings.TrimPrefix(phone, "+")
+
+	// Basic validation - should be at least 10 digits
+	if len(phone) < 10 {
+		return "", fmt.Errorf("phone number too short")
 	}
 
-	// Basic validation - should be at least 10 digits after +
-	if len(phone) < 11 { // + plus at least 10 digits
-		return "", fmt.Errorf("phone number too short")
+	// Ensure it's all digits
+	for _, char := range phone {
+		if char < '0' || char > '9' {
+			return "", fmt.Errorf("phone number contains invalid characters")
+		}
 	}
 
 	// Add WhatsApp suffix if not present

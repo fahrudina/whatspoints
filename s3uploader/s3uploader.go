@@ -17,6 +17,11 @@ func UploadToS3(data []byte) (string, error) {
 	region := config.Env.AWSRegion
 	bucket := config.Env.S3BucketName
 
+	// Check if AWS configuration is available
+	if region == "" || bucket == "" {
+		return "", fmt.Errorf("AWS S3 is not configured. Please set AWS_REGION and S3_BUCKET_NAME environment variables")
+	}
+
 	// Create a new AWS session
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String(region),
