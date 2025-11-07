@@ -13,6 +13,15 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 )
 
+// getLogLevel returns the WhatsApp log level from environment or default to INFO
+func getLogLevel() string {
+	logLevel := os.Getenv("WHATSAPP_LOG_LEVEL")
+	if logLevel == "" {
+		return "INFO"
+	}
+	return logLevel
+}
+
 // ClientManager manages multiple WhatsApp clients
 type ClientManager struct {
 	db              *sql.DB
@@ -24,13 +33,7 @@ type ClientManager struct {
 
 // NewClientManager creates a new client manager
 func NewClientManager(db *sql.DB, connectionString string) (*ClientManager, error) {
-	// Get log level from environment, default to INFO
-	logLevel := os.Getenv("WHATSAPP_LOG_LEVEL")
-	if logLevel == "" {
-		logLevel = "INFO"
-	}
-
-	dbLog := waLog.Stdout("Database", logLevel, true)
+	dbLog := waLog.Stdout("Database", getLogLevel(), true)
 	container, err := sqlstore.New(context.Background(), "postgres", connectionString, dbLog)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database for WhatsApp sessions: %w", err)
@@ -57,11 +60,7 @@ func (cm *ClientManager) loadExistingClients() error {
 		return err
 	}
 
-	// Get log level from environment
-	logLevel := os.Getenv("WHATSAPP_LOG_LEVEL")
-	if logLevel == "" {
-		logLevel = "INFO"
-	}
+	logLevel := getLogLevel()
 
 	for _, device := range devices {
 		if device.ID != nil {
@@ -84,12 +83,14 @@ func (cm *ClientManager) loadExistingClients() error {
 				continue
 			}
 
+			cm.mu.Lock()
 			cm.clients[senderID] = client
 
 			// Set as default if it's the first one
 			if cm.defaultSenderID == "" {
 				cm.defaultSenderID = senderID
 			}
+			cm.mu.Unlock()
 		}
 	}
 
@@ -103,7 +104,10 @@ func (cm *ClientManager) ensureSenderRecord(senderID, phoneNumber string) {
 		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (sender_id) DO NOTHING
 	`
+	cm.mu.RLock()
 	isDefault := cm.defaultSenderID == ""
+	cm.mu.RUnlock()
+
 	_, err := cm.db.Exec(query, senderID, phoneNumber, fmt.Sprintf("Sender %s", senderID), isDefault, true)
 	if err != nil {
 		log.Printf("Failed to create sender record: %v", err)
