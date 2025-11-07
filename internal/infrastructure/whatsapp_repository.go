@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/wa-serv/internal/domain"
+	"github.com/wa-serv/repository"
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
 	"go.mau.fi/whatsmeow/types"
@@ -130,10 +131,10 @@ func (r *whatsappRepository) GetSenderJID(senderID string) (string, error) {
 	return "", nil
 }
 
-// ListSenders returns all available senders
+// ListSenders returns all active senders
 func (r *whatsappRepository) ListSenders() ([]*domain.Sender, error) {
 	if r.db == nil {
-		// Return default sender only if no database
+		// Return default sender if no database
 		return []*domain.Sender{
 			{
 				ID:          "default",
@@ -145,23 +146,27 @@ func (r *whatsappRepository) ListSenders() ([]*domain.Sender, error) {
 		}, nil
 	}
 
-	query := `SELECT sender_id, phone_number, name, is_default, is_active FROM senders WHERE is_active = TRUE`
-	rows, err := r.db.Query(query)
+	// Use repository layer
+	senders, err := repository.GetAllSenders(r.db)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query senders: %w", err)
+		return nil, fmt.Errorf("failed to get senders: %w", err)
 	}
-	defer rows.Close()
 
-	var senders []*domain.Sender
-	for rows.Next() {
-		var s domain.Sender
-		if err := rows.Scan(&s.ID, &s.PhoneNumber, &s.Name, &s.IsDefault, &s.IsActive); err != nil {
-			return nil, fmt.Errorf("failed to scan sender: %w", err)
+	// Convert repository.Sender to domain.Sender
+	domainSenders := make([]*domain.Sender, 0, len(senders))
+	for _, s := range senders {
+		if s.IsActive {
+			domainSenders = append(domainSenders, &domain.Sender{
+				ID:          s.SenderID,
+				PhoneNumber: s.PhoneNumber,
+				Name:        s.Name,
+				IsDefault:   s.IsDefault,
+				IsActive:    s.IsActive,
+			})
 		}
-		senders = append(senders, &s)
 	}
 
-	return senders, nil
+	return domainSenders, nil
 }
 
 // GetDefaultSender returns the default sender
@@ -177,16 +182,25 @@ func (r *whatsappRepository) GetDefaultSender() (*domain.Sender, error) {
 		}, nil
 	}
 
-	query := `SELECT sender_id, phone_number, name, is_default, is_active FROM senders WHERE is_default = TRUE AND is_active = TRUE LIMIT 1`
-	var s domain.Sender
-	err := r.db.QueryRow(query).Scan(&s.ID, &s.PhoneNumber, &s.Name, &s.IsDefault, &s.IsActive)
-	if err == sql.ErrNoRows {
-		// No default sender set, return error indicating no default is available
-		return nil, domain.ErrNoActiveSender
-	}
+	// Get all senders and find the default one
+	senders, err := repository.GetAllSenders(r.db)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get default sender: %w", err)
+		return nil, fmt.Errorf("failed to get senders: %w", err)
 	}
 
-	return &s, nil
+	// Find default and active sender
+	for _, s := range senders {
+		if s.IsDefault && s.IsActive {
+			return &domain.Sender{
+				ID:          s.SenderID,
+				PhoneNumber: s.PhoneNumber,
+				Name:        s.Name,
+				IsDefault:   s.IsDefault,
+				IsActive:    s.IsActive,
+			}, nil
+		}
+	}
+
+	// No default sender set
+	return nil, domain.ErrNoActiveSender
 }

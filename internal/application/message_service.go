@@ -88,6 +88,16 @@ func (s *messageService) GetStatus(ctx context.Context) (*domain.ServiceStatus, 
 	}, nil
 }
 
+// ListSenders implements the business logic for listing available senders
+func (s *messageService) ListSenders(ctx context.Context) ([]*domain.Sender, error) {
+	senders, err := s.whatsappRepo.ListSenders()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get senders: %w", err)
+	}
+
+	return senders, nil
+}
+
 // validateSendMessageRequest validates the send message request
 func (s *messageService) validateSendMessageRequest(req *domain.SendMessageRequest) error {
 	if req == nil {

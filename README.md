@@ -23,6 +23,7 @@ A modern, production-ready WhatsApp messaging service built with Go, featuring c
 ### API Endpoints
 - `POST /api/send-message` - Send WhatsApp messages via REST API
 - `GET /api/status` - Check WhatsApp connection and service status
+- `GET /api/senders` - List all available WhatsApp sender accounts
 - `GET /health` - Health check endpoint for monitoring
 
 ## 📋 Prerequisites
@@ -103,9 +104,24 @@ go build -o whatspoints
 To register multiple sender phone numbers:
 
 1. **Initial Setup**: Connect the first WhatsApp account as described above
-2. **Additional Senders**: Each WhatsApp account connection creates a sender record in the database
+2. **Add Additional Senders**: Use the `-add-sender` command to add more phone numbers:
+   ```bash
+   # Add a new WhatsApp phone number
+   ./whatspoints -add-sender
+   
+   # Or during development
+   go run main.go -add-sender
+   ```
+   
+   This will:
+   - Display a QR code in your terminal
+   - Wait for you to scan it with the new WhatsApp account
+   - Automatically register the sender in the database
+   - Make it available for sending messages
+
 3. **Sender Management**: The application automatically tracks registered senders in the `senders` table
 4. **Default Sender**: The first connected account becomes the default sender
+5. **List Senders**: After adding a sender, the command shows all available sender IDs
 
 **Database Schema for Senders:**
 ```sql
@@ -163,6 +179,50 @@ curl -X POST http://localhost:8080/api/send-message \
 ```
 
 **Note:** The `from` parameter is optional. If not provided, the default sender will be used.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Message sent successfully",
+  "id": "message_id_here"
+}
+```
+
+#### List All Available Senders
+
+Get a list of all registered WhatsApp sender phone numbers:
+
+```bash
+# Get all available senders
+curl -X GET http://localhost:8080/api/senders \
+  -u admin:your_secure_password
+```
+
+**Response:**
+```json
+{
+  "count": 2,
+  "senders": [
+    {
+      "id": "1234567890",
+      "phone_number": "1234567890",
+      "name": "Sender 1234567890",
+      "is_default": true,
+      "is_active": true
+    },
+    {
+      "id": "9876543210",
+      "phone_number": "9876543210",
+      "name": "Sender 9876543210",
+      "is_default": false,
+      "is_active": true
+    }
+  ]
+}
+```
+
+**Use Case:** Call this endpoint to get the list of sender IDs before sending a message with a specific sender.
 
 **Response:**
 ```json

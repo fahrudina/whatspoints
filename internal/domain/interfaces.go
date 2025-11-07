@@ -31,6 +31,7 @@ type WhatsAppRepository interface {
 type MessageService interface {
 	SendMessage(ctx context.Context, req *SendMessageRequest) (*SendMessageResponse, error)
 	GetStatus(ctx context.Context) (*ServiceStatus, error)
+	ListSenders(ctx context.Context) ([]*Sender, error)
 }
 
 // AuthService defines the authentication interface

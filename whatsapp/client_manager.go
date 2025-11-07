@@ -8,6 +8,8 @@ import (
 	"os"
 	"sync"
 
+	"github.com/mdp/qrterminal/v3"
+	"github.com/wa-serv/repository"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	waLog "go.mau.fi/whatsmeow/util/log"
@@ -99,16 +101,13 @@ func (cm *ClientManager) loadExistingClients() error {
 
 // ensureSenderRecord ensures a sender record exists in the database
 func (cm *ClientManager) ensureSenderRecord(senderID, phoneNumber string) {
-	query := `
-		INSERT INTO senders (sender_id, phone_number, name, is_default, is_active)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (sender_id) DO NOTHING
-	`
 	cm.mu.RLock()
 	isDefault := cm.defaultSenderID == ""
 	cm.mu.RUnlock()
 
-	_, err := cm.db.Exec(query, senderID, phoneNumber, fmt.Sprintf("Sender %s", senderID), isDefault, true)
+	name := fmt.Sprintf("Sender %s", senderID)
+
+	err := repository.CreateSenderIfNotExists(cm.db, senderID, phoneNumber, name, isDefault)
 	if err != nil {
 		log.Printf("Failed to create sender record: %v", err)
 	}
@@ -167,4 +166,70 @@ func (cm *ClientManager) DisconnectAll() {
 	for _, client := range cm.clients {
 		client.Disconnect()
 	}
+}
+
+// AddNewClient registers a new WhatsApp client for a new phone number
+func (cm *ClientManager) AddNewClient() (*whatsmeow.Client, error) {
+	// Create a NEW device store for the new phone number
+	// NOTE: Do NOT use GetFirstDevice() - that returns existing devices
+	deviceStore := cm.container.NewDevice()
+
+	logLevel := getLogLevel()
+	clientLog := waLog.Stdout("NewClient", logLevel, true)
+	client := whatsmeow.NewClient(deviceStore, clientLog)
+
+	// Add event handler
+	client.AddEventHandler(func(evt interface{}) {
+		handleEvent(evt, cm.db, client)
+	})
+
+	// Check if this device is already registered (shouldn't be for new device)
+	if client.Store.ID != nil {
+		return nil, fmt.Errorf("device already has an ID - this shouldn't happen for a new device")
+	}
+
+	// Get QR code for scanning
+	fmt.Println("\n=== Adding New WhatsApp Phone Number ===")
+	fmt.Println("Please scan this QR code with the WhatsApp account you want to add:")
+	fmt.Println()
+
+	qrChan, _ := client.GetQRChannel(context.Background())
+	if err := client.Connect(); err != nil {
+		return nil, fmt.Errorf("failed to connect: %w", err)
+	}
+
+	// Wait for QR code scan
+	for evt := range qrChan {
+		if evt.Event == "code" {
+			// Display QR code in terminal
+			fmt.Println("QR Code (scan with WhatsApp):")
+			qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
+			fmt.Println()
+		} else if evt.Event == "success" {
+			fmt.Println("\n✓ Successfully connected new phone number!")
+			break
+		} else {
+			fmt.Printf("Login event: %s\n", evt.Event)
+		}
+	}
+
+	// Wait for device ID to be set
+	if client.Store.ID == nil {
+		return nil, fmt.Errorf("failed to get device ID after connection")
+	}
+
+	senderID := client.Store.ID.User
+	fmt.Printf("✓ New sender registered with ID: %s\n", senderID)
+
+	// Register sender in database
+	cm.ensureSenderRecord(senderID, client.Store.ID.User)
+
+	// Add to client map
+	cm.mu.Lock()
+	cm.clients[senderID] = client
+	cm.mu.Unlock()
+
+	fmt.Println("✓ New phone number is ready to send messages!")
+
+	return client, nil
 }

@@ -26,6 +26,7 @@ var httpServer *http.Server
 func main() {
 
 	clearSessions := flag.Bool("clear-sessions", false, "Clear all WhatsApp sessions")
+	addSender := flag.Bool("add-sender", false, "Add a new WhatsApp phone number")
 	flag.Parse()
 
 	if *clearSessions {
@@ -34,6 +35,11 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Println("All WhatsApp sessions cleared successfully")
+		os.Exit(0)
+	}
+
+	if *addSender {
+		addNewSender()
 		os.Exit(0)
 	}
 
@@ -203,4 +209,63 @@ func waitForTermination(client *whatsapp.Client) {
 	}
 
 	fmt.Println("Shutdown complete")
+}
+
+// addNewSender adds a new WhatsApp phone number to the multi-sender system
+func addNewSender() {
+	// Load environment variables
+	config.LoadEnv()
+	fmt.Println("Environment variables loaded successfully")
+
+	// Initialize database
+	connectionString := database.BuildPostgresConnectionString()
+
+	var err error
+	db, err = sql.Open("postgres", connectionString)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to connect to database: %v\n", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	// Test the connection
+	if err := db.Ping(); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to ping database: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Initialize required tables
+	if err := database.InitSendersTable(db); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize senders table: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := database.InitWhatsmeowTables(db); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize Whatsmeow tables: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Create ClientManager
+	clientManager, err := whatsapp.NewClientManager(db, connectionString)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create client manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Add new client (this will show QR code and wait for scan)
+	_, err = clientManager.AddNewClient()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to add new sender: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("\n✓ New WhatsApp phone number added successfully!")
+	fmt.Println("You can now use this sender with the API.")
+
+	// List all available senders
+	senders := clientManager.ListClients()
+	fmt.Printf("\nTotal senders available: %d\n", len(senders))
+	for i, senderID := range senders {
+		fmt.Printf("%d. Sender ID: %s\n", i+1, senderID)
+	}
 }
