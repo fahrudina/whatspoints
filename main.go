@@ -166,6 +166,7 @@ func startAPIServer(client *whatsapp.Client) {
 		fmt.Printf("  POST /api/send-message - Send WhatsApp message\n")
 		fmt.Printf("  GET  /api/status       - Get service status\n")
 		fmt.Printf("  GET  /health           - Health check\n")
+		fmt.Printf("  GET  /api/senders      - List available senders\n")
 		fmt.Printf("Basic Auth: %s / %s\n", username, "***")
 
 		if err := apiServer.Start(); err != nil && err != http.ErrServerClosed {
