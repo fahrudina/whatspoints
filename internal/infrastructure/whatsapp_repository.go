@@ -177,17 +177,12 @@ func (r *whatsappRepository) GetDefaultSender() (*domain.Sender, error) {
 		}, nil
 	}
 
-	query := `SELECT sender_id, phone_number, name, is_default, is_active FROM senders WHERE is_default = TRUE LIMIT 1`
+	query := `SELECT sender_id, phone_number, name, is_default, is_active FROM senders WHERE is_default = TRUE AND is_active = TRUE LIMIT 1`
 	var s domain.Sender
 	err := r.db.QueryRow(query).Scan(&s.ID, &s.PhoneNumber, &s.Name, &s.IsDefault, &s.IsActive)
 	if err == sql.ErrNoRows {
-		// No default sender, get first active one
-		query = `SELECT sender_id, phone_number, name, is_default, is_active FROM senders WHERE is_active = TRUE LIMIT 1`
-		err = r.db.QueryRow(query).Scan(&s.ID, &s.PhoneNumber, &s.Name, &s.IsDefault, &s.IsActive)
-		if err != nil {
-			return nil, domain.ErrNoActiveSender
-		}
-		return &s, nil
+		// No default sender set, return error indicating no default is available
+		return nil, domain.ErrNoActiveSender
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get default sender: %w", err)

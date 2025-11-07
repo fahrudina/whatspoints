@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
+	"os"
 	"sync"
 
 	"go.mau.fi/whatsmeow"
@@ -22,7 +24,13 @@ type ClientManager struct {
 
 // NewClientManager creates a new client manager
 func NewClientManager(db *sql.DB, connectionString string) (*ClientManager, error) {
-	dbLog := waLog.Stdout("Database", "DEBUG", true)
+	// Get log level from environment, default to INFO
+	logLevel := os.Getenv("WHATSAPP_LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "INFO"
+	}
+
+	dbLog := waLog.Stdout("Database", logLevel, true)
 	container, err := sqlstore.New(context.Background(), "postgres", connectionString, dbLog)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database for WhatsApp sessions: %w", err)
@@ -49,6 +57,12 @@ func (cm *ClientManager) loadExistingClients() error {
 		return err
 	}
 
+	// Get log level from environment
+	logLevel := os.Getenv("WHATSAPP_LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "INFO"
+	}
+
 	for _, device := range devices {
 		if device.ID != nil {
 			// Get or create sender record
@@ -56,7 +70,7 @@ func (cm *ClientManager) loadExistingClients() error {
 			cm.ensureSenderRecord(senderID, device.ID.User)
 
 			// Create client
-			clientLog := waLog.Stdout(fmt.Sprintf("Client-%s", senderID), "DEBUG", true)
+			clientLog := waLog.Stdout(fmt.Sprintf("Client-%s", senderID), logLevel, true)
 			client := whatsmeow.NewClient(device, clientLog)
 
 			// Add event handler
@@ -66,7 +80,7 @@ func (cm *ClientManager) loadExistingClients() error {
 
 			// Connect the client
 			if err := client.Connect(); err != nil {
-				fmt.Printf("Failed to connect client %s: %v\n", senderID, err)
+				log.Printf("Failed to connect client %s: %v", senderID, err)
 				continue
 			}
 
@@ -92,7 +106,7 @@ func (cm *ClientManager) ensureSenderRecord(senderID, phoneNumber string) {
 	isDefault := cm.defaultSenderID == ""
 	_, err := cm.db.Exec(query, senderID, phoneNumber, fmt.Sprintf("Sender %s", senderID), isDefault, true)
 	if err != nil {
-		fmt.Printf("Failed to create sender record: %v\n", err)
+		log.Printf("Failed to create sender record: %v", err)
 	}
 }
 

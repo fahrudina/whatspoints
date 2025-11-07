@@ -65,6 +65,9 @@ API_PORT=8080
 API_USERNAME=admin
 API_PASSWORD=your_secure_password
 
+# WhatsApp Configuration (Optional)
+WHATSAPP_LOG_LEVEL=INFO
+
 # AWS Configuration (for future features)
 AWS_REGION=us-east-1
 S3_BUCKET_NAME=your_bucket_name
@@ -271,6 +274,8 @@ services:
 | `API_PORT` | ❌ | `8080` | API server port |
 | `API_USERNAME` | ✅ | - | Basic auth username |
 | `API_PASSWORD` | ✅ | - | Basic auth password |
+| **WhatsApp Configuration** |
+| `WHATSAPP_LOG_LEVEL` | ❌ | `INFO` | WhatsApp client log level (DEBUG, INFO, WARN, ERROR) |
 | **AWS Configuration (Future)** |
 | `AWS_REGION` | ❌ | - | AWS region for S3 |
 | `S3_BUCKET_NAME` | ❌ | - | S3 bucket for media storage |

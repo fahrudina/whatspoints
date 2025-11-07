@@ -352,7 +352,7 @@ func InitSendersTable(db *sql.DB) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS senders (
 		sender_id VARCHAR(50) PRIMARY KEY,
-		phone_number VARCHAR(20) UNIQUE NOT NULL,
+		phone_number VARCHAR(30) UNIQUE NOT NULL,
 		name VARCHAR(100) NOT NULL,
 		is_default BOOLEAN DEFAULT FALSE,
 		is_active BOOLEAN DEFAULT TRUE,
