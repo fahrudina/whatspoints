@@ -6,7 +6,9 @@ A modern, production-ready WhatsApp messaging service built with Go, featuring c
 
 ### Core Functionality
 - **WhatsApp Integration**: Latest Whatsmeow package with PostgreSQL session storage
+- **Multiple Sender Support**: Register and manage multiple WhatsApp sender accounts
 - **REST API**: HTTP endpoints for sending messages and checking status
+- **Sender Selection**: Choose specific sender per API call for flexible messaging
 - **Clean Architecture**: Domain-driven design with proper separation of concerns
 - **Database Integration**: Supabase PostgreSQL with transaction pooler support
 - **Authentication**: HTTP Basic Auth for API security
@@ -89,16 +91,40 @@ go build -o whatspoints
 
 ### 📱 WhatsApp Setup
 
+#### Single Sender (Default)
 1. **First Run**: When you start the application, it will generate a QR code
 2. **Scan QR Code**: Use WhatsApp on your phone to scan the QR code
 3. **Connection**: Once connected, the service will maintain the session in PostgreSQL
+
+#### Multiple Senders (Advanced)
+To register multiple sender phone numbers:
+
+1. **Initial Setup**: Connect the first WhatsApp account as described above
+2. **Additional Senders**: Each WhatsApp account connection creates a sender record in the database
+3. **Sender Management**: The application automatically tracks registered senders in the `senders` table
+4. **Default Sender**: The first connected account becomes the default sender
+
+**Database Schema for Senders:**
+```sql
+CREATE TABLE senders (
+    sender_id VARCHAR(50) PRIMARY KEY,
+    phone_number VARCHAR(20) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    is_default BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Note:** Each WhatsApp session is stored independently. You can manage multiple sessions by connecting different WhatsApp accounts through separate QR code scans or by programmatically managing the WhatsApp device store.
 
 ### 🌐 API Usage
 
 #### Send Message via REST API
 
 ```bash
-# Send a WhatsApp message
+# Send a WhatsApp message (using default sender)
 curl -X POST http://localhost:8080/api/send-message \
   -u admin:your_secure_password \
   -H "Content-Type: application/json" \
@@ -107,6 +133,33 @@ curl -X POST http://localhost:8080/api/send-message \
     "message": "Hello from WhatsPoints API!"
   }'
 ```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Message sent successfully",
+  "id": "message_id_here"
+}
+```
+
+#### Send Message from Specific Sender
+
+When multiple sender phone numbers are registered, you can specify which sender to use:
+
+```bash
+# Send a WhatsApp message from a specific sender
+curl -X POST http://localhost:8080/api/send-message \
+  -u admin:your_secure_password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "to": "+1234567890",
+    "message": "Hello from specific sender!",
+    "from": "sender_id_123"
+  }'
+```
+
+**Note:** The `from` parameter is optional. If not provided, the default sender will be used.
 
 **Response:**
 ```json
@@ -299,6 +352,8 @@ go test ./internal/presentation/...
 ### Current Status ✅
 - [x] WhatsApp integration with latest Whatsmeow
 - [x] REST API for message sending
+- [x] Multiple sender phone number support
+- [x] Sender selection per API call
 - [x] Clean architecture implementation
 - [x] PostgreSQL session storage
 - [x] Basic authentication
@@ -321,7 +376,7 @@ go test ./internal/presentation/...
 - [ ] **Caching**: Redis integration for improved performance
 - [ ] **Monitoring**: Prometheus metrics and health monitoring
 - [ ] **Message Queue**: Async processing with message queues
-- [ ] **Multi-tenant**: Support for multiple WhatsApp accounts
+- [ ] **Sender Management UI**: Web interface for managing multiple sender accounts
 
 ## 🤝 Contributing
 
