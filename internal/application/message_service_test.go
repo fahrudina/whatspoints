@@ -22,13 +22,13 @@ func TestMessageService_SendMessage_Success(t *testing.T) {
 
 	expectedMessage := &domain.Message{
 		ID:      "test-id",
-		To:      "+1234567890@s.whatsapp.net",
+		To:      "1234567890@s.whatsapp.net",
 		Content: "Test message",
 		SentAt:  "2023-01-01",
 	}
 
 	mockRepo.On("IsConnected").Return(true)
-	mockRepo.On("SendMessage", mock.Anything, "+1234567890@s.whatsapp.net", "Test message").Return(expectedMessage, nil)
+	mockRepo.On("SendMessage", mock.Anything, "1234567890@s.whatsapp.net", "Test message").Return(expectedMessage, nil)
 
 	// Act
 	response, err := service.SendMessage(context.Background(), req)
@@ -144,19 +144,19 @@ func TestMessageService_FormatPhoneNumber(t *testing.T) {
 		{
 			name:     "Valid phone with plus",
 			input:    "+1234567890",
-			expected: "+1234567890@s.whatsapp.net",
+			expected: "1234567890@s.whatsapp.net",
 			hasError: false,
 		},
 		{
 			name:     "Valid phone without plus",
 			input:    "1234567890",
-			expected: "+1234567890@s.whatsapp.net",
+			expected: "1234567890@s.whatsapp.net",
 			hasError: false,
 		},
 		{
 			name:     "Phone with spaces and dashes",
 			input:    "+1 (234) 567-890",
-			expected: "+1234567890@s.whatsapp.net",
+			expected: "1234567890@s.whatsapp.net",
 			hasError: false,
 		},
 		{
@@ -181,4 +181,63 @@ func TestMessageService_FormatPhoneNumber(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMessageService_SendMessage_WithSender_Success(t *testing.T) {
+	// Arrange
+	mockRepo := &mocks.MockWhatsAppRepository{}
+	service := NewMessageService(mockRepo)
+
+	req := &domain.SendMessageRequest{
+		To:      "+1234567890",
+		Message: "Test message",
+		From:    "sender123",
+	}
+
+	expectedMessage := &domain.Message{
+		ID:      "test-id",
+		To:      "1234567890@s.whatsapp.net",
+		Content: "Test message",
+		SentAt:  "2023-01-01",
+	}
+
+	mockRepo.On("IsConnected").Return(true)
+	mockRepo.On("SendMessageFrom", mock.Anything, "sender123", "1234567890@s.whatsapp.net", "Test message").Return(expectedMessage, nil)
+
+	// Act
+	response, err := service.SendMessage(context.Background(), req)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.True(t, response.Success)
+	assert.Equal(t, "Message sent successfully", response.Message)
+	assert.Equal(t, "test-id", response.ID)
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestMessageService_SendMessage_WithSender_NotFound(t *testing.T) {
+	// Arrange
+	mockRepo := &mocks.MockWhatsAppRepository{}
+	service := NewMessageService(mockRepo)
+
+	req := &domain.SendMessageRequest{
+		To:      "+1234567890",
+		Message: "Test message",
+		From:    "nonexistent",
+	}
+
+	mockRepo.On("IsConnected").Return(true)
+	mockRepo.On("SendMessageFrom", mock.Anything, "nonexistent", "1234567890@s.whatsapp.net", "Test message").Return(nil, domain.ErrSenderNotFound)
+
+	// Act
+	response, err := service.SendMessage(context.Background(), req)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Equal(t, domain.ErrMessageSendFailed, err)
+	assert.False(t, response.Success)
+	assert.Contains(t, response.Message, "Failed to send message")
+
+	mockRepo.AssertExpectations(t)
 }

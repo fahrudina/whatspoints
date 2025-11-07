@@ -346,3 +346,22 @@ func InitWhatsmeowTables(db *sql.DB) error {
 
 	return nil
 }
+
+// InitSendersTable initializes the senders table for managing multiple WhatsApp sender accounts
+func InitSendersTable(db *sql.DB) error {
+	query := `
+	CREATE TABLE IF NOT EXISTS senders (
+		sender_id VARCHAR(50) PRIMARY KEY,
+		phone_number VARCHAR(30) UNIQUE NOT NULL,
+		name VARCHAR(100) NOT NULL,
+		is_default BOOLEAN DEFAULT FALSE,
+		is_active BOOLEAN DEFAULT TRUE,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`
+	_, err := db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to create senders table: %w", err)
+	}
+	return nil
+}

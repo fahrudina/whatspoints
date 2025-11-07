@@ -196,3 +196,85 @@ func TestMessageHandler_GetStatus_ServiceError(t *testing.T) {
 
 	mockMessageService.AssertExpectations(t)
 }
+
+func TestMessageHandler_ListSenders_Success(t *testing.T) {
+	// Arrange
+	mockMessageService := &mocks.MockMessageService{}
+	mockAuthService := &mocks.MockAuthService{}
+	handler := NewMessageHandler(mockMessageService, mockAuthService)
+
+	router := setupTestRouter()
+	router.GET("/senders", handler.ListSenders)
+
+	expectedSenders := []*domain.Sender{
+		{
+			ID:          "1234567890",
+			PhoneNumber: "1234567890",
+			Name:        "Sender 1234567890",
+			IsDefault:   true,
+			IsActive:    true,
+		},
+		{
+			ID:          "9876543210",
+			PhoneNumber: "9876543210",
+			Name:        "Sender 9876543210",
+			IsDefault:   false,
+			IsActive:    true,
+		},
+	}
+
+	mockMessageService.On("ListSenders", mock.Anything).Return(expectedSenders, nil)
+
+	// Prepare request
+	req, _ := http.NewRequest("GET", "/senders", nil)
+
+	// Act
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Assert
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, float64(2), response["count"])
+
+	senders := response["senders"].([]interface{})
+	assert.Len(t, senders, 2)
+
+	firstSender := senders[0].(map[string]interface{})
+	assert.Equal(t, "1234567890", firstSender["id"])
+	assert.Equal(t, true, firstSender["is_default"])
+
+	mockMessageService.AssertExpectations(t)
+}
+
+func TestMessageHandler_ListSenders_ServiceError(t *testing.T) {
+	// Arrange
+	mockMessageService := &mocks.MockMessageService{}
+	mockAuthService := &mocks.MockAuthService{}
+	handler := NewMessageHandler(mockMessageService, mockAuthService)
+
+	router := setupTestRouter()
+	router.GET("/senders", handler.ListSenders)
+
+	mockMessageService.On("ListSenders", mock.Anything).Return(([]*domain.Sender)(nil), domain.ErrNoActiveSender)
+
+	// Prepare request
+	req, _ := http.NewRequest("GET", "/senders", nil)
+
+	// Act
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Assert
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+
+	var response map[string]string
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "no active sender available", response["error"])
+
+	mockMessageService.AssertExpectations(t)
+}

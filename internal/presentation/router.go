@@ -38,6 +38,7 @@ func (r *Router) SetupRoutes() *gin.Engine {
 	{
 		apiRoutes.POST("/send-message", r.messageHandler.SendMessage)
 		apiRoutes.GET("/status", r.messageHandler.GetStatus)
+		apiRoutes.GET("/senders", r.messageHandler.ListSenders)
 	}
 
 	return router

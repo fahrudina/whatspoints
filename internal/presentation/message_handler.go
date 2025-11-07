@@ -75,3 +75,19 @@ func (h *MessageHandler) HealthCheck(c *gin.Context) {
 		"service": "whatspoints-api",
 	})
 }
+
+// ListSenders handles GET /api/senders
+func (h *MessageHandler) ListSenders(c *gin.Context) {
+	senders, err := h.messageService.ListSenders(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"senders": senders,
+		"count":   len(senders),
+	})
+}

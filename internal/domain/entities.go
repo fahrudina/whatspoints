@@ -12,6 +12,7 @@ type Message struct {
 type SendMessageRequest struct {
 	To      string `json:"to" validate:"required"`
 	Message string `json:"message" validate:"required"`
+	From    string `json:"from,omitempty"` // Optional: sender phone number identifier
 }
 
 // SendMessageResponse represents the response after sending a message
@@ -31,4 +32,13 @@ type WhatsAppStatus struct {
 // ServiceStatus represents the overall service status
 type ServiceStatus struct {
 	WhatsApp WhatsAppStatus `json:"whatsapp"`
+}
+
+// Sender represents a WhatsApp sender account
+type Sender struct {
+	ID          string `json:"id"`           // Unique identifier for the sender
+	PhoneNumber string `json:"phone_number"` // Phone number in WhatsApp format
+	Name        string `json:"name"`         // Friendly name for the sender
+	IsDefault   bool   `json:"is_default"`   // Whether this is the default sender
+	IsActive    bool   `json:"is_active"`    // Whether this sender is currently active
 }

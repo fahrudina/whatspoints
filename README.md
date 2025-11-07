@@ -6,7 +6,9 @@ A modern, production-ready WhatsApp messaging service built with Go, featuring c
 
 ### Core Functionality
 - **WhatsApp Integration**: Latest Whatsmeow package with PostgreSQL session storage
+- **Multiple Sender Support**: Register and manage multiple WhatsApp sender accounts
 - **REST API**: HTTP endpoints for sending messages and checking status
+- **Sender Selection**: Choose specific sender per API call for flexible messaging
 - **Clean Architecture**: Domain-driven design with proper separation of concerns
 - **Database Integration**: Supabase PostgreSQL with transaction pooler support
 - **Authentication**: HTTP Basic Auth for API security
@@ -21,6 +23,7 @@ A modern, production-ready WhatsApp messaging service built with Go, featuring c
 ### API Endpoints
 - `POST /api/send-message` - Send WhatsApp messages via REST API
 - `GET /api/status` - Check WhatsApp connection and service status
+- `GET /api/senders` - List all available WhatsApp sender accounts
 - `GET /health` - Health check endpoint for monitoring
 
 ## 📋 Prerequisites
@@ -63,6 +66,9 @@ API_PORT=8080
 API_USERNAME=admin
 API_PASSWORD=your_secure_password
 
+# WhatsApp Configuration (Optional)
+WHATSAPP_LOG_LEVEL=INFO
+
 # AWS Configuration (for future features)
 AWS_REGION=us-east-1
 S3_BUCKET_NAME=your_bucket_name
@@ -89,16 +95,55 @@ go build -o whatspoints
 
 ### 📱 WhatsApp Setup
 
+#### Single Sender (Default)
 1. **First Run**: When you start the application, it will generate a QR code
 2. **Scan QR Code**: Use WhatsApp on your phone to scan the QR code
 3. **Connection**: Once connected, the service will maintain the session in PostgreSQL
+
+#### Multiple Senders (Advanced)
+To register multiple sender phone numbers:
+
+1. **Initial Setup**: Connect the first WhatsApp account as described above
+2. **Add Additional Senders**: Use the `-add-sender` command to add more phone numbers:
+   ```bash
+   # Add a new WhatsApp phone number
+   ./whatspoints -add-sender
+   
+   # Or during development
+   go run main.go -add-sender
+   ```
+   
+   This will:
+   - Display a QR code in your terminal
+   - Wait for you to scan it with the new WhatsApp account
+   - Automatically register the sender in the database
+   - Make it available for sending messages
+
+3. **Sender Management**: The application automatically tracks registered senders in the `senders` table
+4. **Default Sender**: The first connected account becomes the default sender
+5. **List Senders**: After adding a sender, the command shows all available sender IDs
+
+**Database Schema for Senders:**
+```sql
+CREATE TABLE senders (
+    sender_id VARCHAR(50) PRIMARY KEY,
+    phone_number VARCHAR(20) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    is_default BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Note:** Each WhatsApp session is stored independently. You can manage multiple sessions by connecting different WhatsApp accounts through separate QR code scans or by programmatically managing the WhatsApp device store.
 
 ### 🌐 API Usage
 
 #### Send Message via REST API
 
 ```bash
-# Send a WhatsApp message
+# Send a WhatsApp message (using default sender)
 curl -X POST http://localhost:8080/api/send-message \
   -u admin:your_secure_password \
   -H "Content-Type: application/json" \
@@ -107,6 +152,77 @@ curl -X POST http://localhost:8080/api/send-message \
     "message": "Hello from WhatsPoints API!"
   }'
 ```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Message sent successfully",
+  "id": "message_id_here"
+}
+```
+
+#### Send Message from Specific Sender
+
+When multiple sender phone numbers are registered, you can specify which sender to use:
+
+```bash
+# Send a WhatsApp message from a specific sender
+curl -X POST http://localhost:8080/api/send-message \
+  -u admin:your_secure_password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "to": "+1234567890",
+    "message": "Hello from specific sender!",
+    "from": "sender_id_123"
+  }'
+```
+
+**Note:** The `from` parameter is optional. If not provided, the default sender will be used.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Message sent successfully",
+  "id": "message_id_here"
+}
+```
+
+#### List All Available Senders
+
+Get a list of all registered WhatsApp sender phone numbers:
+
+```bash
+# Get all available senders
+curl -X GET http://localhost:8080/api/senders \
+  -u admin:your_secure_password
+```
+
+**Response:**
+```json
+{
+  "count": 2,
+  "senders": [
+    {
+      "id": "1234567890",
+      "phone_number": "1234567890",
+      "name": "Sender 1234567890",
+      "is_default": true,
+      "is_active": true
+    },
+    {
+      "id": "9876543210",
+      "phone_number": "9876543210",
+      "name": "Sender 9876543210",
+      "is_default": false,
+      "is_active": true
+    }
+  ]
+}
+```
+
+**Use Case:** Call this endpoint to get the list of sender IDs before sending a message with a specific sender.
 
 **Response:**
 ```json
@@ -218,6 +334,8 @@ services:
 | `API_PORT` | ❌ | `8080` | API server port |
 | `API_USERNAME` | ✅ | - | Basic auth username |
 | `API_PASSWORD` | ✅ | - | Basic auth password |
+| **WhatsApp Configuration** |
+| `WHATSAPP_LOG_LEVEL` | ❌ | `INFO` | WhatsApp client log level (DEBUG, INFO, WARN, ERROR) |
 | **AWS Configuration (Future)** |
 | `AWS_REGION` | ❌ | - | AWS region for S3 |
 | `S3_BUCKET_NAME` | ❌ | - | S3 bucket for media storage |
@@ -299,6 +417,8 @@ go test ./internal/presentation/...
 ### Current Status ✅
 - [x] WhatsApp integration with latest Whatsmeow
 - [x] REST API for message sending
+- [x] Multiple sender phone number support
+- [x] Sender selection per API call
 - [x] Clean architecture implementation
 - [x] PostgreSQL session storage
 - [x] Basic authentication
@@ -321,7 +441,7 @@ go test ./internal/presentation/...
 - [ ] **Caching**: Redis integration for improved performance
 - [ ] **Monitoring**: Prometheus metrics and health monitoring
 - [ ] **Message Queue**: Async processing with message queues
-- [ ] **Multi-tenant**: Support for multiple WhatsApp accounts
+- [ ] **Sender Management UI**: Web interface for managing multiple sender accounts
 
 ## 🤝 Contributing
 

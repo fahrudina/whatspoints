@@ -20,8 +20,8 @@ type APIServer struct {
 
 // NewAPIServer creates a new API server instance using clean architecture
 func NewAPIServer(db *sql.DB, client *whatsmeow.Client, username, password string, port string) *APIServer {
-	// Infrastructure layer
-	whatsappRepo := infrastructure.NewWhatsAppRepository(client)
+	// Infrastructure layer - use repository with database support
+	whatsappRepo := infrastructure.NewWhatsAppRepositoryWithDB(client, db)
 
 	// Application layer
 	messageService := application.NewMessageService(whatsappRepo)
