@@ -51,8 +51,16 @@ func (s *messageService) SendMessage(ctx context.Context, req *domain.SendMessag
 	sendCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	// Send message
-	message, err := s.whatsappRepo.SendMessage(sendCtx, formattedPhone, req.Message)
+	// Send message - either from a specific sender or the default one
+	var message *domain.Message
+	if req.From != "" {
+		// Send from specific sender
+		message, err = s.whatsappRepo.SendMessageFrom(sendCtx, req.From, formattedPhone, req.Message)
+	} else {
+		// Send from default sender
+		message, err = s.whatsappRepo.SendMessage(sendCtx, formattedPhone, req.Message)
+	}
+
 	if err != nil {
 		return &domain.SendMessageResponse{
 			Success: false,
