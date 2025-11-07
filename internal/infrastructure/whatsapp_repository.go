@@ -36,6 +36,22 @@ func NewWhatsAppRepositoryWithDB(client *whatsmeow.Client, db *sql.DB) domain.Wh
 	}
 }
 
+// NewWhatsAppRepositoryWithClients creates a new WhatsApp repository with multiple clients
+func NewWhatsAppRepositoryWithClients(defaultClient *whatsmeow.Client, db *sql.DB, clients map[string]*whatsmeow.Client) domain.WhatsAppRepository {
+	repo := &whatsappRepository{
+		client:    defaultClient,
+		db:        db,
+		clientMap: make(map[string]*whatsmeow.Client),
+	}
+
+	// Register all clients
+	for senderID, client := range clients {
+		repo.clientMap[senderID] = client
+	}
+
+	return repo
+}
+
 // RegisterClient registers a client for a specific sender
 func (r *whatsappRepository) RegisterClient(senderID string, client *whatsmeow.Client) {
 	r.clientMap[senderID] = client

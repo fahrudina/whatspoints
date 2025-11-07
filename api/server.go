@@ -9,6 +9,7 @@ import (
 	"github.com/wa-serv/internal/application"
 	"github.com/wa-serv/internal/infrastructure"
 	"github.com/wa-serv/internal/presentation"
+	"github.com/wa-serv/whatsapp"
 	"go.mau.fi/whatsmeow"
 )
 
@@ -49,6 +50,46 @@ func NewAPIServer(db *sql.DB, client *whatsmeow.Client, username, password strin
 	}
 }
 
+// NewAPIServerWithClientManager creates a new API server with multi-client support
+func NewAPIServerWithClientManager(db *sql.DB, clientManager *whatsapp.ClientManager, username, password string, port string) *APIServer {
+	// Get default client and all clients
+	defaultClient, err := clientManager.GetDefaultClient()
+	if err != nil {
+		// Fallback to nil if no default client
+		defaultClient = nil
+	}
+
+	allClients := clientManager.GetAllClients()
+
+	// Infrastructure layer - use repository with multiple clients
+	whatsappRepo := infrastructure.NewWhatsAppRepositoryWithClients(defaultClient, db, allClients)
+
+	// Application layer
+	messageService := application.NewMessageService(whatsappRepo)
+	authService := application.NewAuthService(username, password)
+
+	// Presentation layer
+	messageHandler := presentation.NewMessageHandler(messageService, authService)
+	router := presentation.NewRouter(messageHandler, authService)
+
+	// Setup routes
+	ginRouter := router.SetupRoutes()
+
+	// Configure HTTP server
+	httpServer := &http.Server{
+		Addr:         ":" + port,
+		Handler:      ginRouter,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	return &APIServer{
+		router:     ginRouter,
+		httpServer: httpServer,
+	}
+}
+
 // Start starts the API server
 func (s *APIServer) Start() error {
 	return s.httpServer.ListenAndServe()
@@ -57,6 +98,11 @@ func (s *APIServer) Start() error {
 // Shutdown gracefully shuts down the API server
 func (s *APIServer) Shutdown() error {
 	return s.httpServer.Close()
+}
+
+// GetHTTPServer returns the underlying HTTP server
+func (s *APIServer) GetHTTPServer() *http.Server {
+	return s.httpServer
 }
 
 // GetRouter returns the gin router for testing

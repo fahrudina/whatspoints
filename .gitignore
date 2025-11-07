@@ -35,3 +35,7 @@ Thumbs.db
 
 # SQLite database
 whatsappdata.db
+
+# build directories
+/build/
+/dist/
