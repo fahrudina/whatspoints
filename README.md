@@ -85,12 +85,59 @@ go run main.go
 ```
 
 #### Production Build
+
+**Using Makefile (Recommended)**
+```bash
+# Build for current platform
+make build
+
+# Build for Ubuntu Linux (amd64)
+make linux
+
+# Build for macOS (Apple Silicon/arm64)
+make macos-arm64
+
+# Build for all platforms
+make build-all
+
+# View all available commands
+make help
+```
+
+**Manual Build**
 ```bash
 # Build the application
 go build -o whatspoints
 
 # Run the built binary
 ./whatspoints
+```
+
+The Makefile supports:
+- **Linux builds**: `make linux` (amd64), `make linux-arm64` (ARM64)
+- **macOS builds**: `make macos` (Intel), `make macos-arm64` (Apple Silicon)
+- **Testing**: `make test`, `make test-coverage`
+- **Utilities**: `make clean`, `make deps`, `make install`
+
+All cross-platform builds are output to the `build/` directory.
+
+#### CLI Commands
+
+```bash
+# Start the API server (default)
+./whatspoints
+
+# Add new sender using QR code
+./whatspoints -add-sender
+
+# Add new sender using SMS pairing code
+./whatspoints -add-sender-code=+1234567890
+
+# Clear all WhatsApp sessions
+./whatspoints -clear-sessions
+
+# Show help
+./whatspoints -h
 ```
 
 ### 📱 WhatsApp Setup
@@ -101,23 +148,52 @@ go build -o whatspoints
 3. **Connection**: Once connected, the service will maintain the session in PostgreSQL
 
 #### Multiple Senders (Advanced)
-To register multiple sender phone numbers:
+To register multiple sender phone numbers, you can use **two different pairing methods**:
 
-1. **Initial Setup**: Connect the first WhatsApp account as described above
-2. **Add Additional Senders**: Use the `-add-sender` command to add more phone numbers:
-   ```bash
-   # Add a new WhatsApp phone number
-   ./whatspoints -add-sender
+##### Method 1: QR Code Pairing (Visual)
+
+```bash
+# Add a new WhatsApp phone number using QR code
+./whatspoints -add-sender
+
+# Or during development
+go run main.go -add-sender
+```
+
+**Steps:**
+1. Run the command above
+2. A QR code will appear in your terminal
+3. Open WhatsApp on the phone you want to add
+4. Scan the QR code
+5. The sender is automatically registered
+
+##### Method 2: Phone Number Pairing (SMS Code)
+
+```bash
+# Add a new WhatsApp phone number using SMS pairing code
+./whatspoints -add-sender-code=+1234567890
+
+# Or during development
+go run main.go -add-sender-code=+1234567890
+```
+
+**Steps:**
+1. Run the command with your phone number (include country code)
+2. A pairing code will be sent via SMS to that number
+3. The code will also be displayed in the terminal
+4. Open WhatsApp on your phone
+5. Go to: Settings > Linked Devices > Link a Device > Link with phone number instead
+6. Enter the pairing code
+7. The sender is automatically registered
+
+**Which method to use?**
+- **QR Code**: Best when you have physical access to scan with your phone
+- **Pairing Code**: Best for remote setups or when QR scanning is difficult
    
-   # Or during development
-   go run main.go -add-sender
-   ```
-   
-   This will:
-   - Display a QR code in your terminal
-   - Wait for you to scan it with the new WhatsApp account
-   - Automatically register the sender in the database
-   - Make it available for sending messages
+**After pairing:**
+- The sender is automatically registered in the database
+- The sender becomes available for sending messages via API
+- Session is maintained in PostgreSQL for automatic reconnection
 
 3. **Sender Management**: The application automatically tracks registered senders in the `senders` table
 4. **Default Sender**: The first connected account becomes the default sender
