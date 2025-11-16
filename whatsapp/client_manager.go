@@ -17,8 +17,8 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 )
 
-// getLogLevel returns the WhatsApp log level from environment or default to INFO
-func getLogLevel() string {
+// GetLogLevel returns the WhatsApp log level from environment or default to INFO
+func GetLogLevel() string {
 	logLevel := os.Getenv("WHATSAPP_LOG_LEVEL")
 	if logLevel == "" {
 		return "INFO"
@@ -37,7 +37,7 @@ type ClientManager struct {
 
 // NewClientManager creates a new client manager
 func NewClientManager(db *sql.DB, connectionString string) (*ClientManager, error) {
-	dbLog := waLog.Stdout("Database", getLogLevel(), true)
+	dbLog := waLog.Stdout("Database", GetLogLevel(), true)
 	container, err := sqlstore.New(context.Background(), "postgres", connectionString, dbLog)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database for WhatsApp sessions: %w", err)
@@ -64,7 +64,7 @@ func (cm *ClientManager) loadExistingClients() error {
 		return err
 	}
 
-	logLevel := getLogLevel()
+	logLevel := GetLogLevel()
 
 	for _, device := range devices {
 		if device.ID != nil {
@@ -182,13 +182,37 @@ func (cm *ClientManager) DisconnectAll() {
 	}
 }
 
+// AddExistingClient adds an already connected client to the manager
+func (cm *ClientManager) AddExistingClient(client *whatsmeow.Client, senderID string) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	// Add to clients map
+	cm.clients[senderID] = client
+
+	// Set as default if it's the first one
+	if cm.defaultSenderID == "" {
+		cm.defaultSenderID = senderID
+	}
+
+	// Add event handler for ongoing message handling
+	client.AddEventHandler(func(evt interface{}) {
+		handleEvent(evt, cm.db, client)
+	})
+}
+
+// GetContainer returns the sqlstore container for creating new devices
+func (cm *ClientManager) GetContainer() *sqlstore.Container {
+	return cm.container
+}
+
 // AddNewClient registers a new WhatsApp client for a new phone number
 func (cm *ClientManager) AddNewClient() (*whatsmeow.Client, error) {
 	// Create a NEW device store for the new phone number
 	// NOTE: Do NOT use GetFirstDevice() - that returns existing devices
 	deviceStore := cm.container.NewDevice()
 
-	logLevel := getLogLevel()
+	logLevel := GetLogLevel()
 	clientLog := waLog.Stdout("NewClient", logLevel, true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 
@@ -254,7 +278,7 @@ func (cm *ClientManager) AddNewClientWithPairingCode(phoneNumber string) (*whats
 	// Create a NEW device store for the new phone number
 	deviceStore := cm.container.NewDevice()
 
-	logLevel := getLogLevel()
+	logLevel := GetLogLevel()
 	clientLog := waLog.Stdout("NewClient", logLevel, true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 

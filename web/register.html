@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register New Sender - WhatsPoints</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .method-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .method-card {
+            padding: 25px;
+            border: 3px solid #e0e0e0;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+
+        .method-card:hover {
+            border-color: #667eea;
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .method-card.active {
+            border-color: #667eea;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        }
+
+        .method-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+
+        .method-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .method-description {
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+
+        .form-section {
+            display: none;
+        }
+
+        .form-section.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 35px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-weight: 600;
+            width: 100%;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .back-button {
+            background: #6c757d;
+            margin-bottom: 20px;
+            width: auto;
+            display: inline-block;
+        }
+
+        .qr-container {
+            text-align: center;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+
+        .qr-code {
+            max-width: 100%;
+            height: auto;
+            border: 5px solid white;
+            border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            background: white;
+            padding: 20px;
+            margin: 20px auto;
+            display: inline-block;
+        }
+
+        .instructions {
+            background: #e7f3ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border-left: 4px solid #2196F3;
+        }
+
+        .instructions h3 {
+            margin-bottom: 15px;
+            color: #1976D2;
+        }
+
+        .instructions ol {
+            margin-left: 20px;
+        }
+
+        .instructions li {
+            margin-bottom: 10px;
+            line-height: 1.6;
+        }
+
+        .status-message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .status-message.success {
+            background: #d4edda;
+            color: #155724;
+            border-left: 4px solid #28a745;
+        }
+
+        .status-message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid #f5c6cb;
+        }
+
+        .status-message.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border-left: 4px solid #17a2b8;
+        }
+
+        .status-message.warning {
+            background: #fff3cd;
+            color: #856404;
+            border-left: 4px solid #ffc107;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .code-display {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
+            text-align: center;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            margin: 20px 0;
+            letter-spacing: 0.2em;
+            font-family: 'Courier New', monospace;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2em;
+            }
+
+            .method-selector {
+                grid-template-columns: 1fr;
+            }
+
+            .method-icon {
+                font-size: 2.5em;
+            }
+
+            .code-display {
+                font-size: 1.8em;
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📱 Register New Sender</h1>
+            <p class="subtitle">Add a WhatsApp sender to your account</p>
+        </header>
+
+        <div class="card">
+            <button class="back-button" onclick="window.location.href='/'">
+                ← Back to Dashboard
+            </button>
+
+            <div id="method-selection">
+                <h2 style="margin-bottom: 20px;">Choose Registration Method</h2>
+                <div class="method-selector">
+                    <div class="method-card" onclick="selectMethod('qr')">
+                        <div class="method-icon">📷</div>
+                        <div class="method-title">QR Code</div>
+                        <div class="method-description">Scan a QR code with your phone</div>
+                    </div>
+                    <div class="method-card" onclick="selectMethod('code')">
+                        <div class="method-icon">🔢</div>
+                        <div class="method-title">Pairing Code</div>
+                        <div class="method-description">Enter a code sent via SMS</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="qr-section" class="form-section">
+                <h2 style="margin-bottom: 20px;">QR Code Registration</h2>
+                <div id="qr-status"></div>
+                <div id="qr-content"></div>
+                <button onclick="startQRRegistration()">Generate QR Code</button>
+            </div>
+
+            <div id="code-section" class="form-section">
+                <h2 style="margin-bottom: 20px;">Pairing Code Registration</h2>
+                <div id="code-status"></div>
+                <div id="code-content">
+                    <div class="form-group">
+                        <label for="phoneNumber">Phone Number (with country code)</label>
+                        <input 
+                            type="tel" 
+                            id="phoneNumber" 
+                            placeholder="+1234567890"
+                            pattern="^\+?[0-9]{10,15}$"
+                        >
+                        <small style="color: #6c757d; display: block; margin-top: 5px;">
+                            Example: +1234567890 or +628123456789
+                        </small>
+                    </div>
+                    <button onclick="startCodeRegistration()">Request Pairing Code</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE = '/api';
+        const AUTH_CREDENTIALS = btoa('admin:' + (prompt('Enter API password:') || 'password'));
+
+        let currentMethod = null;
+        let currentSessionId = null;
+        let statusCheckInterval = null;
+
+        function selectMethod(method) {
+            currentMethod = method;
+            
+            // Update UI
+            document.querySelectorAll('.method-card').forEach(card => {
+                card.classList.remove('active');
+            });
+            event.target.closest('.method-card').classList.add('active');
+
+            // Hide method selection
+            document.getElementById('method-selection').style.display = 'none';
+
+            // Show selected section
+            document.querySelectorAll('.form-section').forEach(section => {
+                section.classList.remove('active');
+            });
+
+            if (method === 'qr') {
+                document.getElementById('qr-section').classList.add('active');
+            } else {
+                document.getElementById('code-section').classList.add('active');
+            }
+        }
+
+        async function startQRRegistration() {
+            const statusDiv = document.getElementById('qr-status');
+            const contentDiv = document.getElementById('qr-content');
+            
+            statusDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Generating QR code...</p></div>';
+            contentDiv.innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/register-sender-qr`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Basic ${AUTH_CREDENTIALS}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.message || 'Failed to generate QR code');
+                }
+
+                currentSessionId = data.session_id;
+
+                // Display QR code
+                contentDiv.innerHTML = `
+                    <div class="qr-container">
+                        <h3>Scan this QR code with WhatsApp</h3>
+                        <pre class="qr-code">${data.qr_code}</pre>
+                    </div>
+                    <div class="instructions">
+                        <h3>📱 How to scan:</h3>
+                        <ol>
+                            <li>Open WhatsApp on your phone</li>
+                            <li>Go to <strong>Settings</strong> > <strong>Linked Devices</strong></li>
+                            <li>Tap <strong>Link a Device</strong></li>
+                            <li>Scan the QR code above</li>
+                        </ol>
+                    </div>
+                `;
+
+                statusDiv.innerHTML = '<div class="status-message info">⏳ Waiting for you to scan the QR code...</div>';
+
+                // Start checking status
+                startStatusCheck();
+
+            } catch (error) {
+                console.error('Error starting QR registration:', error);
+                statusDiv.innerHTML = `<div class="status-message error">❌ ${error.message}</div>`;
+                contentDiv.innerHTML = `
+                    <button onclick="startQRRegistration()">Try Again</button>
+                `;
+            }
+        }
+
+        async function startCodeRegistration() {
+            const phoneNumber = document.getElementById('phoneNumber').value.trim();
+            const statusDiv = document.getElementById('code-status');
+            const contentDiv = document.getElementById('code-content');
+
+            if (!phoneNumber) {
+                statusDiv.innerHTML = '<div class="status-message error">❌ Please enter a phone number</div>';
+                return;
+            }
+
+            statusDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Requesting pairing code...</p></div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/register-sender-code`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Basic ${AUTH_CREDENTIALS}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ phone_number: phoneNumber })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.message || 'Failed to request pairing code');
+                }
+
+                currentSessionId = data.session_id;
+
+                // Display pairing code
+                contentDiv.innerHTML = `
+                    <div class="code-display">${data.pairing_code}</div>
+                    <div class="instructions">
+                        <h3>📱 How to enter the code:</h3>
+                        <ol>
+                            <li>Open WhatsApp on your phone (${data.phone_number})</li>
+                            <li>Go to <strong>Settings</strong> > <strong>Linked Devices</strong></li>
+                            <li>Tap <strong>Link a Device</strong></li>
+                            <li>Tap <strong>Link with phone number instead</strong></li>
+                            <li>Enter the code: <strong>${data.pairing_code}</strong></li>
+                        </ol>
+                    </div>
+                `;
+
+                statusDiv.innerHTML = '<div class="status-message info">⏳ Waiting for you to enter the code in WhatsApp...</div>';
+
+                // Start checking status
+                startStatusCheck();
+
+            } catch (error) {
+                console.error('Error starting code registration:', error);
+                statusDiv.innerHTML = `<div class="status-message error">❌ ${error.message}</div>`;
+            }
+        }
+
+        function startStatusCheck() {
+            // Clear any existing interval
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+
+            // Check status every 2 seconds
+            statusCheckInterval = setInterval(checkRegistrationStatus, 2000);
+        }
+
+        async function checkRegistrationStatus() {
+            if (!currentSessionId) {
+                clearInterval(statusCheckInterval);
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/register-sender-status/${currentSessionId}`, {
+                    headers: {
+                        'Authorization': `Basic ${AUTH_CREDENTIALS}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.status === 'connected') {
+                    clearInterval(statusCheckInterval);
+                    
+                    const statusDiv = currentMethod === 'qr' ? 
+                        document.getElementById('qr-status') : 
+                        document.getElementById('code-status');
+                    
+                    statusDiv.innerHTML = `
+                        <div class="status-message success">
+                            ✅ Successfully registered! Sender ID: ${data.sender_id}
+                            <br><br>
+                            <button onclick="window.location.href='/'">Go to Dashboard</button>
+                        </div>
+                    `;
+                } else if (data.status === 'failed') {
+                    clearInterval(statusCheckInterval);
+                    
+                    const statusDiv = currentMethod === 'qr' ? 
+                        document.getElementById('qr-status') : 
+                        document.getElementById('code-status');
+                    
+                    statusDiv.innerHTML = `
+                        <div class="status-message error">
+                            ❌ Registration failed. Please try again.
+                            <br><br>
+                            <button onclick="window.location.reload()">Try Again</button>
+                        </div>
+                    `;
+                }
+
+            } catch (error) {
+                console.error('Error checking status:', error);
+                // Don't stop checking on transient errors
+            }
+        }
+
+        // Clean up interval on page unload
+        window.addEventListener('beforeunload', function() {
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+        });
+    </script>
+</body>
+</html>

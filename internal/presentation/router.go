@@ -6,8 +6,9 @@ import (
 )
 
 type Router struct {
-	messageHandler *MessageHandler
-	authService    domain.AuthService
+	messageHandler             *MessageHandler
+	senderRegistrationHandler  *SenderRegistrationHandler
+	authService                domain.AuthService
 }
 
 // NewRouter creates a new router
@@ -15,6 +16,15 @@ func NewRouter(messageHandler *MessageHandler, authService domain.AuthService) *
 	return &Router{
 		messageHandler: messageHandler,
 		authService:    authService,
+	}
+}
+
+// NewRouterWithRegistration creates a new router with sender registration support
+func NewRouterWithRegistration(messageHandler *MessageHandler, senderRegistrationHandler *SenderRegistrationHandler, authService domain.AuthService) *Router {
+	return &Router{
+		messageHandler:            messageHandler,
+		senderRegistrationHandler: senderRegistrationHandler,
+		authService:               authService,
 	}
 }
 
@@ -32,6 +42,11 @@ func (r *Router) SetupRoutes() *gin.Engine {
 	// Health check endpoint (no auth required)
 	router.GET("/health", r.messageHandler.HealthCheck)
 
+	// Serve static files for the web UI (no auth required)
+	router.StaticFile("/", "./web/index.html")
+	router.StaticFile("/register", "./web/register.html")
+	router.Static("/web", "./web")
+
 	// API routes with Basic Auth
 	apiRoutes := router.Group("/api")
 	apiRoutes.Use(AuthMiddleware(r.authService))
@@ -39,7 +54,19 @@ func (r *Router) SetupRoutes() *gin.Engine {
 		apiRoutes.POST("/send-message", r.messageHandler.SendMessage)
 		apiRoutes.GET("/status", r.messageHandler.GetStatus)
 		apiRoutes.GET("/senders", r.messageHandler.ListSenders)
+
+		// Sender registration endpoints (if handler is available)
+		if r.senderRegistrationHandler != nil {
+			apiRoutes.POST("/register-sender-qr", r.senderRegistrationHandler.StartQRRegistration)
+			apiRoutes.POST("/register-sender-code", r.senderRegistrationHandler.StartCodeRegistration)
+			apiRoutes.GET("/register-sender-status/:sessionId", r.senderRegistrationHandler.GetRegistrationStatus)
+		}
 	}
+
+	// Fallback for SPA routing
+	router.NoRoute(func(c *gin.Context) {
+		c.File("./web/index.html")
+	})
 
 	return router
 }

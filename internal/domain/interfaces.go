@@ -34,6 +34,13 @@ type MessageService interface {
 	ListSenders(ctx context.Context) ([]*Sender, error)
 }
 
+// SenderRegistrationService defines the business logic interface for sender registration
+type SenderRegistrationService interface {
+	StartQRRegistration(ctx context.Context) (*RegisterSenderQRResponse, error)
+	StartCodeRegistration(ctx context.Context, req *RegisterSenderCodeRequest) (*RegisterSenderCodeResponse, error)
+	GetRegistrationStatus(ctx context.Context, sessionID string) (*RegistrationStatusResponse, error)
+}
+
 // AuthService defines the authentication interface
 type AuthService interface {
 	ValidateCredentials(username, password string) bool
