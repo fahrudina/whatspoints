@@ -9,14 +9,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/mdp/qrterminal/v3"
+	qrcode "github.com/skip2/go-qrcode"
 	"github.com/wa-serv/internal/domain"
 	"github.com/wa-serv/repository"
 	"github.com/wa-serv/whatsapp"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
-	"bytes"
 )
 
 // RegistrationSession tracks an ongoing registration
@@ -70,6 +69,7 @@ func (s *SenderRegistrationService) StartQRRegistration(ctx context.Context) (*d
 
 	// Add event handler to track connection status
 	client.AddEventHandler(func(evt interface{}) {
+		// First, handle registration-specific events
 		switch evt.(type) {
 		case *events.PairSuccess:
 			session.mu.Lock()
@@ -94,6 +94,10 @@ func (s *SenderRegistrationService) StartQRRegistration(ctx context.Context) (*d
 			}
 			session.mu.Unlock()
 		}
+
+		// Then, let whatsapp package handle all events normally
+		// This ensures proper WebSocket connection maintenance
+		whatsapp.HandleEvent(evt, s.db, client)
 	})
 
 	// Get QR code channel
@@ -176,6 +180,7 @@ func (s *SenderRegistrationService) StartCodeRegistration(ctx context.Context, r
 
 	// Add event handler to track connection status
 	client.AddEventHandler(func(evt interface{}) {
+		// First, handle registration-specific events
 		switch evt.(type) {
 		case *events.PairSuccess:
 			session.mu.Lock()
@@ -191,6 +196,10 @@ func (s *SenderRegistrationService) StartCodeRegistration(ctx context.Context, r
 			session.Status = "failed"
 			session.mu.Unlock()
 		}
+
+		// Then, let whatsapp package handle all events normally
+		// This ensures proper WebSocket connection maintenance
+		whatsapp.HandleEvent(evt, s.db, client)
 	})
 
 	// Connect first
@@ -332,15 +341,11 @@ func cleanPhoneNumber(phone string) string {
 
 // generateQRCodePNG generates a QR code as PNG bytes
 func generateQRCodePNG(code string) []byte {
-	// For simplicity, we'll return the raw QR code data
-	// In production, you might want to generate an actual PNG image
-	// For now, we'll use qrterminal to generate ASCII art and convert that
-	var buf bytes.Buffer
-	qrterminal.GenerateWithConfig(code, qrterminal.Config{
-		Level:     qrterminal.L,
-		Writer:    &buf,
-		BlackChar: qrterminal.BLACK,
-		WhiteChar: qrterminal.WHITE,
-	})
-	return buf.Bytes()
+	// Generate QR code as PNG image
+	png, err := qrcode.Encode(code, qrcode.Medium, 256)
+	if err != nil {
+		fmt.Printf("Failed to generate QR code: %v\n", err)
+		return []byte{}
+	}
+	return png
 }

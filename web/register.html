@@ -299,11 +299,11 @@
             <div id="method-selection">
                 <h2 style="margin-bottom: 20px;">Choose Registration Method</h2>
                 <div class="method-selector">
-                    <div class="method-card" onclick="selectMethod('qr')">
+                    <!-- <div class="method-card" onclick="selectMethod('qr')">
                         <div class="method-icon">📷</div>
                         <div class="method-title">QR Code</div>
                         <div class="method-description">Scan a QR code with your phone</div>
-                    </div>
+                    </div> -->
                     <div class="method-card" onclick="selectMethod('code')">
                         <div class="method-icon">🔢</div>
                         <div class="method-title">Pairing Code</div>
@@ -406,7 +406,7 @@
                 contentDiv.innerHTML = `
                     <div class="qr-container">
                         <h3>Scan this QR code with WhatsApp</h3>
-                        <pre class="qr-code">${data.qr_code}</pre>
+                        <img class="qr-code" src="data:image/png;base64,${data.qr_code}" alt="WhatsApp QR Code" />
                     </div>
                     <div class="instructions">
                         <h3>📱 How to scan:</h3>

@@ -216,10 +216,31 @@ func (cm *ClientManager) AddNewClient() (*whatsmeow.Client, error) {
 	clientLog := waLog.Stdout("NewClient", logLevel, true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 
-	// Add event handler
-	client.AddEventHandler(func(evt interface{}) {
-		handleEvent(evt, cm.db, client)
+	// Create channels to wait for pairing success and connection
+	pairingDone := make(chan bool, 1)
+	connectionDone := make(chan bool, 1)
+	pairingFailed := make(chan bool, 1)
+	pairingTimeout := time.After(5 * time.Minute)
+
+	// Add event handler to track connection status
+	var eventID uint32
+	eventID = client.AddEventHandler(func(evt interface{}) {
+		switch v := evt.(type) {
+		case *events.PairSuccess:
+			fmt.Println("\n✓ QR code scanned successfully! Waiting for connection to complete...")
+			pairingDone <- true
+		case *events.Connected:
+			fmt.Println("✓ Connection established!")
+			connectionDone <- true
+		case *events.LoggedOut:
+			fmt.Println("\n✗ Login failed or logged out")
+			pairingFailed <- true
+		default:
+			// Also handle regular events
+			handleEvent(v, cm.db, client)
+		}
 	})
+	defer client.RemoveEventHandler(eventID)
 
 	// Check if this device is already registered (shouldn't be for new device)
 	if client.Store.ID != nil {
@@ -236,19 +257,39 @@ func (cm *ClientManager) AddNewClient() (*whatsmeow.Client, error) {
 		return nil, fmt.Errorf("failed to connect: %w", err)
 	}
 
-	// Wait for QR code scan
-	for evt := range qrChan {
-		if evt.Event == "code" {
-			// Display QR code in terminal
-			fmt.Println("QR Code (scan with WhatsApp):")
-			qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-			fmt.Println()
-		} else if evt.Event == "success" {
-			fmt.Println("\n✓ Successfully connected new phone number!")
-			break
-		} else {
-			fmt.Printf("Login event: %s\n", evt.Event)
+	// Display QR codes as they come
+	go func() {
+		for evt := range qrChan {
+			if evt.Event == "code" {
+				// Display QR code in terminal
+				fmt.Println("QR Code (scan with WhatsApp):")
+				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
+				fmt.Println()
+			} else {
+				fmt.Printf("Login event: %s\n", evt.Event)
+			}
 		}
+	}()
+
+	// Wait for pairing to complete
+	fmt.Println("Waiting for QR code scan...")
+	select {
+	case <-pairingDone:
+		// Pairing successful, now wait for connection
+		fmt.Println("Waiting for WhatsApp connection to complete...")
+		select {
+		case <-connectionDone:
+			// Connection successful
+			fmt.Println("✓ Successfully connected new phone number!")
+		case <-time.After(30 * time.Second):
+			return nil, fmt.Errorf("timeout waiting for connection after pairing")
+		case <-pairingFailed:
+			return nil, fmt.Errorf("connection failed after pairing")
+		}
+	case <-pairingFailed:
+		return nil, fmt.Errorf("pairing failed")
+	case <-pairingTimeout:
+		return nil, fmt.Errorf("timeout waiting for QR code scan (5 minutes)")
 	}
 
 	// Wait for device ID to be set
@@ -321,30 +362,45 @@ func (cm *ClientManager) AddNewClientWithPairingCode(phoneNumber string) (*whats
 	fmt.Println()
 	fmt.Println("Waiting for pairing to complete...")
 
-	// Create a channel to wait for pairing success
+	// Create channels to wait for pairing success and connection
 	pairingDone := make(chan bool, 1)
+	connectionDone := make(chan bool, 1)
+	pairingFailed := make(chan bool, 1)
 	pairingTimeout := time.After(5 * time.Minute) // 5 minute timeout
 
-	// Add event handler to detect successful pairing
+	// Add event handler to detect successful pairing and connection
 	var eventID uint32
 	eventID = client.AddEventHandler(func(evt interface{}) {
 		switch evt.(type) {
 		case *events.PairSuccess:
-			fmt.Println("\n✓ Pairing successful!")
+			fmt.Println("\n✓ Pairing successful! Waiting for connection to complete...")
 			pairingDone <- true
+		case *events.Connected:
+			fmt.Println("✓ Connection established!")
+			connectionDone <- true
 		case *events.LoggedOut:
 			fmt.Println("\n✗ Pairing failed - logged out")
-			pairingDone <- false
+			pairingFailed <- true
 		}
 	})
 	defer client.RemoveEventHandler(eventID)
 
 	// Wait for pairing completion or timeout
 	select {
-	case success := <-pairingDone:
-		if !success {
-			return nil, fmt.Errorf("pairing failed")
+	case <-pairingDone:
+		// Pairing successful, now wait for connection
+		fmt.Println("Waiting for WhatsApp connection to complete...")
+		select {
+		case <-connectionDone:
+			// Connection successful
+			fmt.Println("✓ Successfully connected!")
+		case <-time.After(30 * time.Second):
+			return nil, fmt.Errorf("timeout waiting for connection after pairing")
+		case <-pairingFailed:
+			return nil, fmt.Errorf("connection failed after pairing")
 		}
+	case <-pairingFailed:
+		return nil, fmt.Errorf("pairing failed")
 	case <-pairingTimeout:
 		return nil, fmt.Errorf("pairing timed out after 5 minutes")
 	}

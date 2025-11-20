@@ -92,7 +92,8 @@ func connectToWhatsApp(client *whatsmeow.Client) {
 	}
 }
 
-func handleEvent(evt interface{}, db *sql.DB, client *whatsmeow.Client) {
+// HandleEvent processes WhatsApp events (exported for use in other packages)
+func HandleEvent(evt interface{}, db *sql.DB, client *whatsmeow.Client) {
 	switch v := evt.(type) {
 	case *events.Message:
 		handlers.HandleMessageEvent(v, db, client)
@@ -105,6 +106,11 @@ func handleEvent(evt interface{}, db *sql.DB, client *whatsmeow.Client) {
 	case *events.LoggedOut:
 		fmt.Println("Device logged out")
 	}
+}
+
+// handleEvent is kept for backward compatibility within this package
+func handleEvent(evt interface{}, db *sql.DB, client *whatsmeow.Client) {
+	HandleEvent(evt, db, client)
 }
 
 func (c *Client) Disconnect() {

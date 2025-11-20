@@ -9,7 +9,7 @@ import (
 // BuildPostgresConnectionString builds a PostgreSQL connection string from environment variables
 func BuildPostgresConnectionString() string {
 	return fmt.Sprintf(
-		"postgresql://%s:%s@%s:%s/%s?sslmode=%s",
+		"postgresql://%s:%s@%s:%s/%s?sslmode=%s&statement_cache_mode=describe",
 		os.Getenv("SUPABASE_USER"),
 		os.Getenv("SUPABASE_PASSWORD"),
 		os.Getenv("SUPABASE_HOST"),
