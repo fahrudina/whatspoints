@@ -66,6 +66,13 @@ func (cm *ClientManager) loadExistingClients() error {
 
 	logLevel := GetLogLevel()
 
+	// Load default sender from database
+	defaultSender, err := repository.GetDefaultSender(cm.db)
+	if err == nil && defaultSender != nil {
+		cm.defaultSenderID = defaultSender.SenderID
+		log.Printf("Loaded default sender from database: %s", cm.defaultSenderID)
+	}
+
 	for _, device := range devices {
 		if device.ID != nil {
 			// Get or create sender record
@@ -90,9 +97,11 @@ func (cm *ClientManager) loadExistingClients() error {
 			cm.mu.Lock()
 			cm.clients[senderID] = client
 
-			// Set as default if it's the first one
+			// Set as default if it's the first one and no default was loaded from DB
 			if cm.defaultSenderID == "" {
 				cm.defaultSenderID = senderID
+				// Update database to reflect this
+				repository.SetDefaultSender(cm.db, senderID)
 			}
 			cm.mu.Unlock()
 		}
@@ -204,6 +213,35 @@ func (cm *ClientManager) AddExistingClient(client *whatsmeow.Client, senderID st
 // GetContainer returns the sqlstore container for creating new devices
 func (cm *ClientManager) GetContainer() *sqlstore.Container {
 	return cm.container
+}
+
+// SetDefaultSender sets the default sender in both memory and database
+func (cm *ClientManager) SetDefaultSender(senderID string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	// Check if client exists
+	if _, exists := cm.clients[senderID]; !exists {
+		return fmt.Errorf("sender not found: %s", senderID)
+	}
+
+	// Update database
+	if err := repository.SetDefaultSender(cm.db, senderID); err != nil {
+		return fmt.Errorf("failed to set default sender in database: %w", err)
+	}
+
+	// Update in-memory default
+	cm.defaultSenderID = senderID
+	log.Printf("Default sender set to: %s", senderID)
+
+	return nil
+}
+
+// GetDefaultSenderID returns the current default sender ID
+func (cm *ClientManager) GetDefaultSenderID() string {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.defaultSenderID
 }
 
 // AddNewClient registers a new WhatsApp client for a new phone number

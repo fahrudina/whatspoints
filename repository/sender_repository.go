@@ -62,6 +62,68 @@ func GetSenderByID(db *sql.DB, senderID string) (*Sender, error) {
 	return &sender, nil
 }
 
+// GetDefaultSender retrieves the default sender from the database
+func GetDefaultSender(db *sql.DB) (*Sender, error) {
+	query := `
+		SELECT sender_id, phone_number, name, is_default, is_active, created_at, updated_at
+		FROM senders
+		WHERE is_default = true AND is_active = true
+		LIMIT 1
+	`
+
+	var sender Sender
+	err := db.QueryRow(query).Scan(
+		&sender.SenderID,
+		&sender.PhoneNumber,
+		&sender.Name,
+		&sender.IsDefault,
+		&sender.IsActive,
+		&sender.CreatedAt,
+		&sender.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// If no default sender found, try to get the first active sender
+			return getFirstActiveSender(db)
+		}
+		return nil, fmt.Errorf("failed to get default sender: %w", err)
+	}
+
+	return &sender, nil
+}
+
+// getFirstActiveSender retrieves the first active sender ordered by creation date
+func getFirstActiveSender(db *sql.DB) (*Sender, error) {
+	query := `
+		SELECT sender_id, phone_number, name, is_default, is_active, created_at, updated_at
+		FROM senders
+		WHERE is_active = true
+		ORDER BY created_at ASC
+		LIMIT 1
+	`
+
+	var sender Sender
+	err := db.QueryRow(query).Scan(
+		&sender.SenderID,
+		&sender.PhoneNumber,
+		&sender.Name,
+		&sender.IsDefault,
+		&sender.IsActive,
+		&sender.CreatedAt,
+		&sender.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("no active senders found")
+		}
+		return nil, fmt.Errorf("failed to get first active sender: %w", err)
+	}
+
+	return &sender, nil
+}
+
 // GetAllSenders retrieves all senders from the database
 func GetAllSenders(db *sql.DB) ([]Sender, error) {
 	query := `
