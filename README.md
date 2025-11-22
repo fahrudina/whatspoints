@@ -7,7 +7,6 @@ A modern, production-ready WhatsApp messaging service built with Go, featuring c
 ### Core Functionality
 - **WhatsApp Integration**: Latest Whatsmeow package with PostgreSQL session storage
 - **Multiple Sender Support**: Register and manage multiple WhatsApp sender accounts
-- **Web UI**: Modern web interface for sender registration and management
 - **REST API**: HTTP endpoints for sending messages and checking status
 - **Sender Selection**: Choose specific sender per API call for flexible messaging
 - **Clean Architecture**: Domain-driven design with proper separation of concerns
@@ -25,14 +24,7 @@ A modern, production-ready WhatsApp messaging service built with Go, featuring c
 - `POST /api/send-message` - Send WhatsApp messages via REST API
 - `GET /api/status` - Check WhatsApp connection and service status
 - `GET /api/senders` - List all available WhatsApp sender accounts
-- `POST /api/register-sender-qr` - Start QR code registration for new sender
-- `POST /api/register-sender-code` - Start pairing code registration for new sender
-- `GET /api/register-sender-status/:sessionId` - Check registration status
 - `GET /health` - Health check endpoint for monitoring
-
-### Web UI
-- `/` - Sender management dashboard
-- `/register` - Register new sender (QR code or pairing code)
 
 ## 📋 Prerequisites
 
@@ -150,29 +142,13 @@ All cross-platform builds are output to the `build/` directory.
 
 ### 📱 WhatsApp Setup
 
-#### Web UI Registration (Recommended)
+#### Single Sender (Default)
+1. **First Run**: When you start the application, it will generate a QR code
+2. **Scan QR Code**: Use WhatsApp on your phone to scan the QR code
+3. **Connection**: Once connected, the service will maintain the session in PostgreSQL
 
-The easiest way to register new senders is through the web interface:
-
-1. **Start the Application**: Run `./whatspoints` to start the API server
-2. **Open Web Interface**: Navigate to `http://localhost:8080` in your browser
-3. **Access Registration**: Click "Register New Sender" button
-4. **Choose Method**:
-   - **QR Code**: Scan with your WhatsApp app
-   - **Pairing Code**: Enter the code sent to your phone via SMS
-5. **Complete Registration**: Follow the on-screen instructions
-6. **Success**: Your new sender will appear in the dashboard
-
-The web UI provides:
-- ✅ Real-time registration status
-- ✅ Visual QR code display
-- ✅ Step-by-step instructions
-- ✅ Automatic sender management
-- ✅ Error handling with helpful messages
-
-#### CLI Registration (Alternative)
-
-You can also register senders via command line:
+#### Multiple Senders (Advanced)
+To register multiple sender phone numbers, you can use **two different pairing methods**:
 
 ##### Method 1: QR Code Pairing (Visual)
 
@@ -211,7 +187,6 @@ go run main.go -add-sender-code=+1234567890
 7. The sender is automatically registered
 
 **Which method to use?**
-- **Web UI**: Best for most users - provides visual feedback and easy management
 - **QR Code**: Best when you have physical access to scan with your phone
 - **Pairing Code**: Best for remote setups or when QR scanning is difficult
    
@@ -220,11 +195,9 @@ go run main.go -add-sender-code=+1234567890
 - The sender becomes available for sending messages via API
 - Session is maintained in PostgreSQL for automatic reconnection
 
-#### Sender Management
-
-- The application automatically tracks registered senders in the `senders` table
-- The first connected account becomes the default sender
-- View all senders in the web dashboard or via the `/api/senders` endpoint
+3. **Sender Management**: The application automatically tracks registered senders in the `senders` table
+4. **Default Sender**: The first connected account becomes the default sender
+5. **List Senders**: After adding a sender, the command shows all available sender IDs
 
 **Database Schema for Senders:**
 ```sql
@@ -522,8 +495,6 @@ go test ./internal/presentation/...
 - [x] REST API for message sending
 - [x] Multiple sender phone number support
 - [x] Sender selection per API call
-- [x] Web UI for sender registration and management
-- [x] QR code and pairing code registration methods
 - [x] Clean architecture implementation
 - [x] PostgreSQL session storage
 - [x] Basic authentication
@@ -546,7 +517,7 @@ go test ./internal/presentation/...
 - [ ] **Caching**: Redis integration for improved performance
 - [ ] **Monitoring**: Prometheus metrics and health monitoring
 - [ ] **Message Queue**: Async processing with message queues
-- [ ] **Advanced Sender Management**: Edit, delete, and set default senders via UI
+- [ ] **Sender Management UI**: Web interface for managing multiple sender accounts
 
 ## 🤝 Contributing
 
