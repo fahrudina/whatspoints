@@ -67,10 +67,12 @@ func NewAPIServerWithClientManager(db *sql.DB, clientManager *whatsapp.ClientMan
 	// Application layer
 	messageService := application.NewMessageService(whatsappRepo)
 	authService := application.NewAuthService(username, password)
+	registrationService := application.NewSenderRegistrationService(db, clientManager)
 
 	// Presentation layer
 	messageHandler := presentation.NewMessageHandler(messageService, authService)
-	router := presentation.NewRouter(messageHandler, authService)
+	registrationHandler := presentation.NewSenderRegistrationHandler(registrationService, authService)
+	router := presentation.NewRouterWithRegistration(messageHandler, registrationHandler, authService)
 
 	// Setup routes
 	ginRouter := router.SetupRoutes()

@@ -17,8 +17,8 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 )
 
-// getLogLevel returns the WhatsApp log level from environment or default to INFO
-func getLogLevel() string {
+// GetLogLevel returns the WhatsApp log level from environment or default to INFO
+func GetLogLevel() string {
 	logLevel := os.Getenv("WHATSAPP_LOG_LEVEL")
 	if logLevel == "" {
 		return "INFO"
@@ -37,7 +37,7 @@ type ClientManager struct {
 
 // NewClientManager creates a new client manager
 func NewClientManager(db *sql.DB, connectionString string) (*ClientManager, error) {
-	dbLog := waLog.Stdout("Database", getLogLevel(), true)
+	dbLog := waLog.Stdout("Database", GetLogLevel(), true)
 	container, err := sqlstore.New(context.Background(), "postgres", connectionString, dbLog)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database for WhatsApp sessions: %w", err)
@@ -64,7 +64,14 @@ func (cm *ClientManager) loadExistingClients() error {
 		return err
 	}
 
-	logLevel := getLogLevel()
+	logLevel := GetLogLevel()
+
+	// Load default sender from database
+	defaultSender, err := repository.GetDefaultSender(cm.db)
+	if err == nil && defaultSender != nil {
+		cm.defaultSenderID = defaultSender.SenderID
+		log.Printf("Loaded default sender from database: %s", cm.defaultSenderID)
+	}
 
 	for _, device := range devices {
 		if device.ID != nil {
@@ -76,9 +83,9 @@ func (cm *ClientManager) loadExistingClients() error {
 			clientLog := waLog.Stdout(fmt.Sprintf("Client-%s", senderID), logLevel, true)
 			client := whatsmeow.NewClient(device, clientLog)
 
-			// Add event handler
+			// Add event handler with client manager awareness
 			client.AddEventHandler(func(evt interface{}) {
-				handleEvent(evt, cm.db, client)
+				cm.handleEventWithCleanup(evt, client)
 			})
 
 			// Connect the client
@@ -90,9 +97,11 @@ func (cm *ClientManager) loadExistingClients() error {
 			cm.mu.Lock()
 			cm.clients[senderID] = client
 
-			// Set as default if it's the first one
+			// Set as default if it's the first one and no default was loaded from DB
 			if cm.defaultSenderID == "" {
 				cm.defaultSenderID = senderID
+				// Update database to reflect this
+				repository.SetDefaultSender(cm.db, senderID)
 			}
 			cm.mu.Unlock()
 		}
@@ -182,20 +191,188 @@ func (cm *ClientManager) DisconnectAll() {
 	}
 }
 
+// AddExistingClient adds an already connected client to the manager
+func (cm *ClientManager) AddExistingClient(client *whatsmeow.Client, senderID string) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	// Add to clients map
+	cm.clients[senderID] = client
+
+	// Set as default if it's the first one
+	if cm.defaultSenderID == "" {
+		cm.defaultSenderID = senderID
+	}
+
+	// Add event handler for ongoing message handling with cleanup
+	client.AddEventHandler(func(evt interface{}) {
+		cm.handleEventWithCleanup(evt, client)
+	})
+}
+
+// handleEventWithCleanup handles events and performs cleanup for logout events
+func (cm *ClientManager) handleEventWithCleanup(evt interface{}, client *whatsmeow.Client) {
+	// Handle connected events - mark sender as active
+	if _, ok := evt.(*events.Connected); ok {
+		if client.Store.ID != nil {
+			senderID := client.Store.ID.User
+			// Mark sender as active when reconnected
+			if err := repository.UpdateSenderStatus(cm.db, senderID, true); err != nil {
+				log.Printf("Failed to update sender status to active for %s: %v", senderID, err)
+			} else {
+				log.Printf("Client %s reconnected and marked as active", senderID)
+			}
+		}
+	}
+
+	// Handle logout events with cleanup
+	if logoutEvt, ok := evt.(*events.LoggedOut); ok {
+		if client.Store.ID != nil {
+			senderID := client.Store.ID.User
+			log.Printf("[ClientManager] Client %s logged out - Reason: %s", senderID, logoutEvt.Reason)
+
+			// Update sender status to inactive
+			if err := repository.UpdateSenderStatus(cm.db, senderID, false); err != nil {
+				log.Printf("Failed to update sender status for %s: %v", senderID, err)
+			}
+
+			// Remove from clients map
+			cm.mu.Lock()
+			delete(cm.clients, senderID)
+
+			// If this was the default sender, clear it
+			if cm.defaultSenderID == senderID {
+				cm.defaultSenderID = ""
+				log.Printf("Default sender %s was logged out, clearing default", senderID)
+			}
+			cm.mu.Unlock()
+
+			log.Printf("Client %s removed from active clients", senderID)
+
+			// Delete the device session from database
+			if err := cm.container.DeleteDevice(context.Background(), client.Store); err != nil {
+				log.Printf("Failed to delete device session for %s: %v", senderID, err)
+			} else {
+				log.Printf("Device session deleted for %s", senderID)
+			}
+		}
+	}
+
+	// Handle stream replaced events
+	if _, ok := evt.(*events.StreamReplaced); ok {
+		if client.Store.ID != nil {
+			senderID := client.Store.ID.User
+			log.Printf("[ClientManager] Client %s - stream replaced by another session", senderID)
+		}
+	}
+
+	// Call the regular event handler for all events
+	handleEvent(evt, cm.db, client)
+}
+
+// RemoveClient removes a client and marks it as inactive
+func (cm *ClientManager) RemoveClient(senderID string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	client, exists := cm.clients[senderID]
+	if !exists {
+		return fmt.Errorf("client not found: %s", senderID)
+	}
+
+	// Disconnect the client
+	client.Disconnect()
+
+	// Update sender status to inactive
+	if err := repository.UpdateSenderStatus(cm.db, senderID, false); err != nil {
+		log.Printf("Failed to update sender status for %s: %v", senderID, err)
+	}
+
+	// Delete from clients map
+	delete(cm.clients, senderID)
+
+	// If this was the default sender, clear it
+	if cm.defaultSenderID == senderID {
+		cm.defaultSenderID = ""
+	}
+
+	// Delete the device session
+	if err := cm.container.DeleteDevice(context.Background(), client.Store); err != nil {
+		return fmt.Errorf("failed to delete device session: %w", err)
+	}
+
+	log.Printf("Client %s removed successfully", senderID)
+	return nil
+}
+
+// GetContainer returns the sqlstore container for creating new devices
+func (cm *ClientManager) GetContainer() *sqlstore.Container {
+	return cm.container
+}
+
+// SetDefaultSender sets the default sender in both memory and database
+func (cm *ClientManager) SetDefaultSender(senderID string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	// Check if client exists
+	if _, exists := cm.clients[senderID]; !exists {
+		return fmt.Errorf("sender not found: %s", senderID)
+	}
+
+	// Update database
+	if err := repository.SetDefaultSender(cm.db, senderID); err != nil {
+		return fmt.Errorf("failed to set default sender in database: %w", err)
+	}
+
+	// Update in-memory default
+	cm.defaultSenderID = senderID
+	log.Printf("Default sender set to: %s", senderID)
+
+	return nil
+}
+
+// GetDefaultSenderID returns the current default sender ID
+func (cm *ClientManager) GetDefaultSenderID() string {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.defaultSenderID
+}
+
 // AddNewClient registers a new WhatsApp client for a new phone number
 func (cm *ClientManager) AddNewClient() (*whatsmeow.Client, error) {
 	// Create a NEW device store for the new phone number
 	// NOTE: Do NOT use GetFirstDevice() - that returns existing devices
 	deviceStore := cm.container.NewDevice()
 
-	logLevel := getLogLevel()
+	logLevel := GetLogLevel()
 	clientLog := waLog.Stdout("NewClient", logLevel, true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 
-	// Add event handler
-	client.AddEventHandler(func(evt interface{}) {
-		handleEvent(evt, cm.db, client)
+	// Create channels to wait for pairing success and connection
+	pairingDone := make(chan bool, 1)
+	connectionDone := make(chan bool, 1)
+	pairingFailed := make(chan bool, 1)
+	pairingTimeout := time.After(5 * time.Minute)
+
+	// Add event handler to track connection status
+	eventID := client.AddEventHandler(func(evt interface{}) {
+		switch v := evt.(type) {
+		case *events.PairSuccess:
+			fmt.Println("\n✓ QR code scanned successfully! Waiting for connection to complete...")
+			pairingDone <- true
+		case *events.Connected:
+			fmt.Println("✓ Connection established!")
+			connectionDone <- true
+		case *events.LoggedOut:
+			fmt.Println("\n✗ Login failed or logged out")
+			pairingFailed <- true
+		default:
+			// Also handle regular events
+			handleEvent(v, cm.db, client)
+		}
 	})
+	defer client.RemoveEventHandler(eventID)
 
 	// Check if this device is already registered (shouldn't be for new device)
 	if client.Store.ID != nil {
@@ -212,19 +389,39 @@ func (cm *ClientManager) AddNewClient() (*whatsmeow.Client, error) {
 		return nil, fmt.Errorf("failed to connect: %w", err)
 	}
 
-	// Wait for QR code scan
-	for evt := range qrChan {
-		if evt.Event == "code" {
-			// Display QR code in terminal
-			fmt.Println("QR Code (scan with WhatsApp):")
-			qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-			fmt.Println()
-		} else if evt.Event == "success" {
-			fmt.Println("\n✓ Successfully connected new phone number!")
-			break
-		} else {
-			fmt.Printf("Login event: %s\n", evt.Event)
+	// Display QR codes as they come
+	go func() {
+		for evt := range qrChan {
+			if evt.Event == "code" {
+				// Display QR code in terminal
+				fmt.Println("QR Code (scan with WhatsApp):")
+				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
+				fmt.Println()
+			} else {
+				fmt.Printf("Login event: %s\n", evt.Event)
+			}
 		}
+	}()
+
+	// Wait for pairing to complete
+	fmt.Println("Waiting for QR code scan...")
+	select {
+	case <-pairingDone:
+		// Pairing successful, now wait for connection
+		fmt.Println("Waiting for WhatsApp connection to complete...")
+		select {
+		case <-connectionDone:
+			// Connection successful
+			fmt.Println("✓ Successfully connected new phone number!")
+		case <-time.After(30 * time.Second):
+			return nil, fmt.Errorf("timeout waiting for connection after pairing")
+		case <-pairingFailed:
+			return nil, fmt.Errorf("connection failed after pairing")
+		}
+	case <-pairingFailed:
+		return nil, fmt.Errorf("pairing failed")
+	case <-pairingTimeout:
+		return nil, fmt.Errorf("timeout waiting for QR code scan (5 minutes)")
 	}
 
 	// Wait for device ID to be set
@@ -254,7 +451,7 @@ func (cm *ClientManager) AddNewClientWithPairingCode(phoneNumber string) (*whats
 	// Create a NEW device store for the new phone number
 	deviceStore := cm.container.NewDevice()
 
-	logLevel := getLogLevel()
+	logLevel := GetLogLevel()
 	clientLog := waLog.Stdout("NewClient", logLevel, true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 
@@ -297,30 +494,44 @@ func (cm *ClientManager) AddNewClientWithPairingCode(phoneNumber string) (*whats
 	fmt.Println()
 	fmt.Println("Waiting for pairing to complete...")
 
-	// Create a channel to wait for pairing success
+	// Create channels to wait for pairing success and connection
 	pairingDone := make(chan bool, 1)
+	connectionDone := make(chan bool, 1)
+	pairingFailed := make(chan bool, 1)
 	pairingTimeout := time.After(5 * time.Minute) // 5 minute timeout
 
-	// Add event handler to detect successful pairing
-	var eventID uint32
-	eventID = client.AddEventHandler(func(evt interface{}) {
+	// Add event handler to detect successful pairing and connection
+	eventID := client.AddEventHandler(func(evt interface{}) {
 		switch evt.(type) {
 		case *events.PairSuccess:
-			fmt.Println("\n✓ Pairing successful!")
+			fmt.Println("\n✓ Pairing successful! Waiting for connection to complete...")
 			pairingDone <- true
+		case *events.Connected:
+			fmt.Println("✓ Connection established!")
+			connectionDone <- true
 		case *events.LoggedOut:
 			fmt.Println("\n✗ Pairing failed - logged out")
-			pairingDone <- false
+			pairingFailed <- true
 		}
 	})
 	defer client.RemoveEventHandler(eventID)
 
 	// Wait for pairing completion or timeout
 	select {
-	case success := <-pairingDone:
-		if !success {
-			return nil, fmt.Errorf("pairing failed")
+	case <-pairingDone:
+		// Pairing successful, now wait for connection
+		fmt.Println("Waiting for WhatsApp connection to complete...")
+		select {
+		case <-connectionDone:
+			// Connection successful
+			fmt.Println("✓ Successfully connected!")
+		case <-time.After(30 * time.Second):
+			return nil, fmt.Errorf("timeout waiting for connection after pairing")
+		case <-pairingFailed:
+			return nil, fmt.Errorf("connection failed after pairing")
 		}
+	case <-pairingFailed:
+		return nil, fmt.Errorf("pairing failed")
 	case <-pairingTimeout:
 		return nil, fmt.Errorf("pairing timed out after 5 minutes")
 	}

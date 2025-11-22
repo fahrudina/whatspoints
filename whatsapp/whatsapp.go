@@ -12,6 +12,7 @@ import (
 	"github.com/mdp/qrterminal/v3"
 	"github.com/wa-serv/database"
 	"github.com/wa-serv/handlers"
+	"github.com/wa-serv/repository"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types/events"
@@ -92,19 +93,92 @@ func connectToWhatsApp(client *whatsmeow.Client) {
 	}
 }
 
-func handleEvent(evt interface{}, db *sql.DB, client *whatsmeow.Client) {
+// HandleEvent processes WhatsApp events (exported for use in other packages)
+func HandleEvent(evt interface{}, db *sql.DB, client *whatsmeow.Client) {
 	switch v := evt.(type) {
 	case *events.Message:
 		handlers.HandleMessageEvent(v, db, client)
 	case *events.Connected:
-		fmt.Println("Connected to WhatsApp")
+		handleConnected(client)
 	case *events.Disconnected:
-		fmt.Println("Disconnected from WhatsApp")
+		handleDisconnected(client)
 	case *events.PairSuccess:
 		fmt.Println("Successfully paired with device")
 	case *events.LoggedOut:
-		fmt.Println("Device logged out")
+		handleLogout(v, db, client)
+	case *events.StreamReplaced:
+		handleStreamReplaced(client)
+	case *events.StreamError:
+		handleStreamError(v, client)
 	}
+}
+
+// handleConnected handles connection events
+func handleConnected(client *whatsmeow.Client) {
+	if client.Store.ID != nil {
+		senderID := client.Store.ID.User
+		log.Printf("✓ Client %s connected to WhatsApp", senderID)
+	} else {
+		fmt.Println("✓ Connected to WhatsApp")
+	}
+}
+
+// handleDisconnected handles disconnection events
+func handleDisconnected(client *whatsmeow.Client) {
+	if client.Store.ID != nil {
+		senderID := client.Store.ID.User
+		log.Printf("Client %s disconnected from WhatsApp (automatic reconnect will attempt)", senderID)
+	} else {
+		fmt.Println("Disconnected from WhatsApp (automatic reconnect will attempt)")
+	}
+}
+
+// handleStreamReplaced handles stream replacement events
+func handleStreamReplaced(client *whatsmeow.Client) {
+	if client.Store.ID != nil {
+		senderID := client.Store.ID.User
+		log.Printf("⚠ Client %s - stream replaced by another session", senderID)
+	} else {
+		fmt.Println("⚠ Stream replaced - this connection was replaced by another session")
+	}
+}
+
+// handleStreamError handles stream error events
+func handleStreamError(evt *events.StreamError, client *whatsmeow.Client) {
+	if client.Store.ID != nil {
+		senderID := client.Store.ID.User
+		log.Printf("⚠ Client %s - stream error (code: %s) - automatic reconnect will handle it", senderID, evt.Code)
+	} else {
+		log.Printf("⚠ Stream error (code: %s) - automatic reconnect will handle it", evt.Code)
+	}
+	
+	// Stream errors (like 503) are typically handled by automatic reconnection
+	// Only log for monitoring purposes - the client will attempt to reconnect
+}
+
+// handleLogout handles the LoggedOut event
+func handleLogout(evt *events.LoggedOut, db *sql.DB, client *whatsmeow.Client) {
+	fmt.Printf("Device logged out - Reason: %s\n", evt.Reason)
+
+	if client.Store.ID == nil {
+		fmt.Println("Warning: Client has no ID, cannot update sender status")
+		return
+	}
+
+	senderID := client.Store.ID.User
+	fmt.Printf("Marking sender %s as inactive...\n", senderID)
+
+	// Update sender status to inactive
+	if err := repository.UpdateSenderStatus(db, senderID, false); err != nil {
+		log.Printf("Failed to update sender status for %s: %v", senderID, err)
+	} else {
+		fmt.Printf("Sender %s marked as inactive\n", senderID)
+	}
+}
+
+// handleEvent is kept for backward compatibility within this package
+func handleEvent(evt interface{}, db *sql.DB, client *whatsmeow.Client) {
+	HandleEvent(evt, db, client)
 }
 
 func (c *Client) Disconnect() {
