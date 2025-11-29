@@ -340,6 +340,10 @@ func (cm *ClientManager) GetDefaultSenderID() string {
 }
 
 // AddNewClient registers a new WhatsApp client for a new phone number
+// IMPORTANT: Each call creates a NEW sender with a DIFFERENT WhatsApp phone number.
+// WhatsApp limits each phone number to 4 linked devices (including the phone itself).
+// To have multiple senders, you need multiple WhatsApp accounts (different phone numbers).
+// Example: Sender1 (+1234567890), Sender2 (+9876543210), Sender3 (+5555555555)
 func (cm *ClientManager) AddNewClient() (*whatsmeow.Client, error) {
 	// Create a NEW device store for the new phone number
 	// NOTE: Do NOT use GetFirstDevice() - that returns existing devices
@@ -447,6 +451,10 @@ func (cm *ClientManager) AddNewClient() (*whatsmeow.Client, error) {
 
 // AddNewClientWithPairingCode registers a new WhatsApp client using phone number pairing code
 // This method sends a pairing code via SMS instead of using QR scanning
+// IMPORTANT: Each call creates a NEW sender with a DIFFERENT WhatsApp phone number.
+// WhatsApp limits each phone number to 4 linked devices (including the phone itself).
+// To have multiple senders, you need multiple WhatsApp accounts (different phone numbers).
+// Example: Sender1 (+1234567890), Sender2 (+9876543210), Sender3 (+5555555555)
 func (cm *ClientManager) AddNewClientWithPairingCode(phoneNumber string) (*whatsmeow.Client, error) {
 	// Create a NEW device store for the new phone number
 	deviceStore := cm.container.NewDevice()
@@ -455,9 +463,9 @@ func (cm *ClientManager) AddNewClientWithPairingCode(phoneNumber string) (*whats
 	clientLog := waLog.Stdout("NewClient", logLevel, true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 
-	// Add event handler
+	// Add event handler with client manager awareness
 	client.AddEventHandler(func(evt interface{}) {
-		handleEvent(evt, cm.db, client)
+		cm.handleEventWithCleanup(evt, client)
 	})
 
 	// Check if this device is already registered
