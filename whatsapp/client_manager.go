@@ -33,6 +33,7 @@ type ClientManager struct {
 	clients         map[string]*whatsmeow.Client // key: sender_id
 	defaultSenderID string
 	mu              sync.RWMutex
+	reconnecting    map[string]bool // track which clients are currently reconnecting
 }
 
 // NewClientManager creates a new client manager
@@ -44,9 +45,10 @@ func NewClientManager(db *sql.DB, connectionString string) (*ClientManager, erro
 	}
 
 	cm := &ClientManager{
-		db:        db,
-		container: container,
-		clients:   make(map[string]*whatsmeow.Client),
+		db:           db,
+		container:    container,
+		clients:      make(map[string]*whatsmeow.Client),
+		reconnecting: make(map[string]bool),
 	}
 
 	// Initialize with existing devices
@@ -216,20 +218,53 @@ func (cm *ClientManager) handleEventWithCleanup(evt interface{}, client *whatsme
 	if _, ok := evt.(*events.Connected); ok {
 		if client.Store.ID != nil {
 			senderID := client.Store.ID.User
+			// Clear reconnecting flag
+			cm.mu.Lock()
+			delete(cm.reconnecting, senderID)
+			cm.mu.Unlock()
+
 			// Mark sender as active when reconnected
 			if err := repository.UpdateSenderStatus(cm.db, senderID, true); err != nil {
 				log.Printf("Failed to update sender status to active for %s: %v", senderID, err)
 			} else {
-				log.Printf("Client %s reconnected and marked as active", senderID)
+				log.Printf("✓ Client %s connected and marked as active", senderID)
 			}
 		}
 	}
 
-	// Handle logout events with cleanup
+	// Handle disconnected events - let whatsmeow handle automatic reconnection
+	// Do NOT manually reconnect - whatsmeow has built-in reconnection logic
+	// Manual reconnection can trigger WhatsApp's security system
+	if _, ok := evt.(*events.Disconnected); ok {
+		if client.Store.ID != nil {
+			senderID := client.Store.ID.User
+			log.Printf("Client %s disconnected - whatsmeow will handle automatic reconnection", senderID)
+			// Don't manually reconnect - whatsmeow handles this internally
+		}
+	}
+
+	// Handle stream error events - these usually recover automatically via whatsmeow
+	if streamErr, ok := evt.(*events.StreamError); ok {
+		if client.Store.ID != nil {
+			senderID := client.Store.ID.User
+			log.Printf("⚠ Client %s stream error (code: %s) - whatsmeow will handle recovery", senderID, streamErr.Code)
+			// Don't manually intervene - let whatsmeow handle it
+		}
+	}
+
+	// Handle logout events with cleanup - ONLY for explicit logouts
 	if logoutEvt, ok := evt.(*events.LoggedOut); ok {
 		if client.Store.ID != nil {
 			senderID := client.Store.ID.User
-			log.Printf("[ClientManager] Client %s logged out - Reason: %s", senderID, logoutEvt.Reason)
+
+			// Reason is a ConnectFailureReason enum
+			reason := logoutEvt.Reason
+			log.Printf("[ClientManager] Client %s logged out - Reason: %d (%s)", senderID, reason, reason.String())
+
+			// For ANY logout event, clean up properly
+			// WhatsApp logged out this device - we should NOT try to reconnect
+			// Reconnection attempts can trigger WhatsApp's security system
+			log.Printf("Device %s was logged out by WhatsApp, cleaning up session", senderID)
 
 			// Update sender status to inactive
 			if err := repository.UpdateSenderStatus(cm.db, senderID, false); err != nil {
@@ -239,6 +274,7 @@ func (cm *ClientManager) handleEventWithCleanup(evt interface{}, client *whatsme
 			// Remove from clients map
 			cm.mu.Lock()
 			delete(cm.clients, senderID)
+			delete(cm.reconnecting, senderID)
 
 			// If this was the default sender, clear it
 			if cm.defaultSenderID == senderID {
@@ -249,20 +285,24 @@ func (cm *ClientManager) handleEventWithCleanup(evt interface{}, client *whatsme
 
 			log.Printf("Client %s removed from active clients", senderID)
 
-			// Delete the device session from database
+			// Delete the device session from database - session is invalid now
 			if err := cm.container.DeleteDevice(context.Background(), client.Store); err != nil {
 				log.Printf("Failed to delete device session for %s: %v", senderID, err)
 			} else {
 				log.Printf("Device session deleted for %s", senderID)
 			}
+
+			log.Printf("⚠ To reconnect sender %s, please re-register the device via QR code or pairing code", senderID)
 		}
 	}
 
-	// Handle stream replaced events
+	// Handle stream replaced events - another session took over
+	// Do NOT try to reconnect - this will cause a reconnection loop
 	if _, ok := evt.(*events.StreamReplaced); ok {
 		if client.Store.ID != nil {
 			senderID := client.Store.ID.User
-			log.Printf("[ClientManager] Client %s - stream replaced by another session", senderID)
+			log.Printf("⚠ Client %s - stream replaced by another session (do not reconnect)", senderID)
+			// Don't reconnect - another session has taken over
 		}
 	}
 
@@ -270,7 +310,9 @@ func (cm *ClientManager) handleEventWithCleanup(evt interface{}, client *whatsme
 	handleEvent(evt, cm.db, client)
 }
 
-// RemoveClient removes a client and marks it as inactive
+// Note: Removed attemptReconnect function - whatsmeow handles reconnection internally
+// Manual reconnection attempts can trigger WhatsApp's security system and cause
+// devices to be logged out with "unexpected issue" errors// RemoveClient removes a client and marks it as inactive
 func (cm *ClientManager) RemoveClient(senderID string) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()

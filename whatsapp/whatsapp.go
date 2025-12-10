@@ -127,10 +127,14 @@ func handleConnected(client *whatsmeow.Client) {
 func handleDisconnected(client *whatsmeow.Client) {
 	if client.Store.ID != nil {
 		senderID := client.Store.ID.User
-		log.Printf("Client %s disconnected from WhatsApp (automatic reconnect will attempt)", senderID)
+		log.Printf("Client %s disconnected - whatsmeow handles automatic reconnection internally", senderID)
 	} else {
-		fmt.Println("Disconnected from WhatsApp (automatic reconnect will attempt)")
+		fmt.Println("Disconnected from WhatsApp - whatsmeow handles automatic reconnection internally")
 	}
+	// IMPORTANT: Do NOT manually reconnect here
+	// Whatsmeow has built-in reconnection logic
+	// Manual reconnection attempts can trigger WhatsApp's security system
+	// which causes "unexpected issue" logouts
 }
 
 // handleStreamReplaced handles stream replacement events
@@ -151,14 +155,15 @@ func handleStreamError(evt *events.StreamError, client *whatsmeow.Client) {
 	} else {
 		log.Printf("⚠ Stream error (code: %s) - automatic reconnect will handle it", evt.Code)
 	}
-	
+
 	// Stream errors (like 503) are typically handled by automatic reconnection
 	// Only log for monitoring purposes - the client will attempt to reconnect
 }
 
 // handleLogout handles the LoggedOut event
 func handleLogout(evt *events.LoggedOut, db *sql.DB, client *whatsmeow.Client) {
-	fmt.Printf("Device logged out - Reason: %s\n", evt.Reason)
+	reason := evt.Reason
+	fmt.Printf("Device logged out - Reason: %d (%s)\n", reason, reason.String())
 
 	if client.Store.ID == nil {
 		fmt.Println("Warning: Client has no ID, cannot update sender status")
@@ -166,7 +171,11 @@ func handleLogout(evt *events.LoggedOut, db *sql.DB, client *whatsmeow.Client) {
 	}
 
 	senderID := client.Store.ID.User
-	fmt.Printf("Marking sender %s as inactive...\n", senderID)
+
+	// For ANY logout event from WhatsApp, mark as inactive
+	// Do NOT try to reconnect - WhatsApp security system may have triggered this
+	// Reconnection attempts can cause more security flags
+	fmt.Printf("WhatsApp logged out device %s - marking as inactive\n", senderID)
 
 	// Update sender status to inactive
 	if err := repository.UpdateSenderStatus(db, senderID, false); err != nil {
@@ -174,9 +183,9 @@ func handleLogout(evt *events.LoggedOut, db *sql.DB, client *whatsmeow.Client) {
 	} else {
 		fmt.Printf("Sender %s marked as inactive\n", senderID)
 	}
-}
 
-// handleEvent is kept for backward compatibility within this package
+	fmt.Printf("⚠ To reconnect sender %s, please re-register via QR code or pairing code\n", senderID)
+} // handleEvent is kept for backward compatibility within this package
 func handleEvent(evt interface{}, db *sql.DB, client *whatsmeow.Client) {
 	HandleEvent(evt, db, client)
 }
