@@ -33,7 +33,6 @@ type ClientManager struct {
 	clients         map[string]*whatsmeow.Client // key: sender_id
 	defaultSenderID string
 	mu              sync.RWMutex
-	reconnecting    map[string]bool // track which clients are currently reconnecting
 }
 
 // NewClientManager creates a new client manager
@@ -45,10 +44,9 @@ func NewClientManager(db *sql.DB, connectionString string) (*ClientManager, erro
 	}
 
 	cm := &ClientManager{
-		db:           db,
-		container:    container,
-		clients:      make(map[string]*whatsmeow.Client),
-		reconnecting: make(map[string]bool),
+		db:        db,
+		container: container,
+		clients:   make(map[string]*whatsmeow.Client),
 	}
 
 	// Initialize with existing devices
@@ -218,10 +216,6 @@ func (cm *ClientManager) handleEventWithCleanup(evt interface{}, client *whatsme
 	if _, ok := evt.(*events.Connected); ok {
 		if client.Store.ID != nil {
 			senderID := client.Store.ID.User
-			// Clear reconnecting flag
-			cm.mu.Lock()
-			delete(cm.reconnecting, senderID)
-			cm.mu.Unlock()
 
 			// Mark sender as active when reconnected
 			if err := repository.UpdateSenderStatus(cm.db, senderID, true); err != nil {
@@ -274,7 +268,6 @@ func (cm *ClientManager) handleEventWithCleanup(evt interface{}, client *whatsme
 			// Remove from clients map
 			cm.mu.Lock()
 			delete(cm.clients, senderID)
-			delete(cm.reconnecting, senderID)
 
 			// If this was the default sender, clear it
 			if cm.defaultSenderID == senderID {
@@ -312,7 +305,9 @@ func (cm *ClientManager) handleEventWithCleanup(evt interface{}, client *whatsme
 
 // Note: Removed attemptReconnect function - whatsmeow handles reconnection internally
 // Manual reconnection attempts can trigger WhatsApp's security system and cause
-// devices to be logged out with "unexpected issue" errors// RemoveClient removes a client and marks it as inactive
+// devices to be logged out with "unexpected issue" errors
+
+// RemoveClient removes a client and marks it as inactive
 func (cm *ClientManager) RemoveClient(senderID string) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
