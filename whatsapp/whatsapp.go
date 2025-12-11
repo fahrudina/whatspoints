@@ -185,7 +185,9 @@ func handleLogout(evt *events.LoggedOut, db *sql.DB, client *whatsmeow.Client) {
 	}
 
 	fmt.Printf("⚠ To reconnect sender %s, please re-register via QR code or pairing code\n", senderID)
-} // handleEvent is kept for backward compatibility within this package
+}
+
+// handleEvent is kept for backward compatibility within this package
 func handleEvent(evt interface{}, db *sql.DB, client *whatsmeow.Client) {
 	HandleEvent(evt, db, client)
 }
