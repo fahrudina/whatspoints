@@ -165,13 +165,20 @@ func GetAllSenders(db *sql.DB) ([]Sender, error) {
 
 // UpdateSenderStatus updates the active status of a sender
 func UpdateSenderStatus(db *sql.DB, senderID string, isActive bool) error {
+	// Use a transaction to avoid prepared statement caching conflicts
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	query := `
 		UPDATE senders
 		SET is_active = $1, updated_at = CURRENT_TIMESTAMP
 		WHERE sender_id = $2
 	`
 
-	result, err := db.Exec(query, isActive, senderID)
+	result, err := tx.Exec(query, isActive, senderID)
 	if err != nil {
 		return fmt.Errorf("failed to update sender status: %w", err)
 	}
@@ -181,8 +188,13 @@ func UpdateSenderStatus(db *sql.DB, senderID string, isActive bool) error {
 		return fmt.Errorf("failed to get rows affected: %w", err)
 	}
 
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
 	if rowsAffected == 0 {
-		return fmt.Errorf("sender not found: %s", senderID)
+		// Sender might not exist yet, which is okay - don't return error
+		return nil
 	}
 
 	return nil
