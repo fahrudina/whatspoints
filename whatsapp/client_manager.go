@@ -200,18 +200,34 @@ func (cm *ClientManager) AddExistingClient(client *whatsmeow.Client, senderID st
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
+	log.Printf("Adding existing client to manager: %s", senderID)
+
 	// Add to clients map
 	cm.clients[senderID] = client
 
 	// Set as default if it's the first one
 	if cm.defaultSenderID == "" {
 		cm.defaultSenderID = senderID
+		log.Printf("Set %s as default sender", senderID)
+		// Update database to reflect this
+		if err := repository.SetDefaultSender(cm.db, senderID); err != nil {
+			log.Printf("Failed to set default sender in DB: %v", err)
+		}
+	}
+
+	// Mark sender as active in the database
+	if err := repository.UpdateSenderStatus(cm.db, senderID, true); err != nil {
+		log.Printf("Failed to update sender status: %v", err)
+	} else {
+		log.Printf("Marked sender %s as active", senderID)
 	}
 
 	// Add event handler for ongoing message handling with cleanup
 	client.AddEventHandler(func(evt interface{}) {
 		cm.handleEventWithCleanup(evt, client)
 	})
+
+	log.Printf("✓ Successfully added client %s to manager (total clients: %d)", senderID, len(cm.clients))
 }
 
 // handleEventWithCleanup handles events and performs cleanup for logout events

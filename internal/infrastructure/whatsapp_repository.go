@@ -14,9 +14,14 @@ import (
 )
 
 type whatsappRepository struct {
-	client    *whatsmeow.Client // Default client for backward compatibility
-	db        *sql.DB
-	clientMap map[string]*whatsmeow.Client // Map of sender_id -> client
+	client        *whatsmeow.Client // Default client for backward compatibility
+	db            *sql.DB
+	clientMap     map[string]*whatsmeow.Client // Map of sender_id -> client
+	clientManager interface {                  // Interface to get clients dynamically
+		GetClient(senderID string) (*whatsmeow.Client, error)
+		GetDefaultClient() (*whatsmeow.Client, error)
+		GetAllClients() map[string]*whatsmeow.Client
+	}
 }
 
 // NewWhatsAppRepository creates a new WhatsApp repository
@@ -50,6 +55,21 @@ func NewWhatsAppRepositoryWithClients(defaultClient *whatsmeow.Client, db *sql.D
 	}
 
 	return repo
+}
+
+// NewWhatsAppRepositoryWithClientManager creates a repository that uses ClientManager dynamically
+func NewWhatsAppRepositoryWithClientManager(db *sql.DB, clientManager interface {
+	GetClient(senderID string) (*whatsmeow.Client, error)
+	GetDefaultClient() (*whatsmeow.Client, error)
+	GetAllClients() map[string]*whatsmeow.Client
+}) domain.WhatsAppRepository {
+	defaultClient, _ := clientManager.GetDefaultClient()
+	return &whatsappRepository{
+		client:        defaultClient,
+		db:            db,
+		clientMap:     make(map[string]*whatsmeow.Client),
+		clientManager: clientManager,
+	}
 }
 
 // RegisterClient registers a client for a specific sender
@@ -86,10 +106,27 @@ func (r *whatsappRepository) SendMessage(ctx context.Context, to, message string
 
 // SendMessageFrom sends a WhatsApp message from a specific sender
 func (r *whatsappRepository) SendMessageFrom(ctx context.Context, from, to, message string) (*domain.Message, error) {
-	// Get the client for this sender
-	client, ok := r.clientMap[from]
-	if !ok {
-		return nil, fmt.Errorf("sender not found: %s", from)
+	var client *whatsmeow.Client
+	var ok bool
+
+	// Try to get client from clientManager first (for dynamic updates)
+	if r.clientManager != nil {
+		var err error
+		client, err = r.clientManager.GetClient(from)
+		if err != nil {
+			return nil, fmt.Errorf("sender not found: %s", from)
+		}
+	} else {
+		// Fallback to static clientMap
+		client, ok = r.clientMap[from]
+		if !ok {
+			return nil, fmt.Errorf("sender not found: %s", from)
+		}
+	}
+
+	// Check if client is connected
+	if !client.IsConnected() {
+		return nil, fmt.Errorf("sender %s is not connected", from)
 	}
 
 	// Parse JID
@@ -119,7 +156,23 @@ func (r *whatsappRepository) SendMessageFrom(ctx context.Context, from, to, mess
 
 // IsConnected checks if WhatsApp client is connected
 func (r *whatsappRepository) IsConnected() bool {
-	return r.client.IsConnected()
+	// If we have a client manager, check if any client is connected
+	if r.clientManager != nil {
+		clients := r.clientManager.GetAllClients()
+		for _, client := range clients {
+			if client.IsConnected() {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Fallback to default client check
+	if r.client != nil {
+		return r.client.IsConnected()
+	}
+
+	return false
 }
 
 // IsLoggedIn checks if WhatsApp client is logged in
