@@ -104,9 +104,11 @@ func (r *whatsappRepository) getClient(senderID string) (*whatsmeow.Client, erro
 		if ok && client != nil {
 			return client, nil
 		}
+		// Specific sender was requested but not found - return error instead of falling back
+		return nil, domain.ErrSenderNotFound
 	}
 
-	// Fall back to default client from repository
+	// Fall back to default client from repository (only when senderID == "")
 	if r.client != nil {
 		return r.client, nil
 	}
@@ -199,7 +201,8 @@ func (r *whatsappRepository) IsConnected() bool {
 	if r.clientManager != nil {
 		clients := r.clientManager.GetAllClients()
 		for _, client := range clients {
-			if client.IsConnected() {
+			// Guard against nil clients
+			if client != nil && client.IsConnected() {
 				return true
 			}
 		}
