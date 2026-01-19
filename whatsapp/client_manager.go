@@ -12,9 +12,12 @@ import (
 	"github.com/mdp/qrterminal/v3"
 	"github.com/wa-serv/repository"
 	"go.mau.fi/whatsmeow"
+	waCompanionReg "go.mau.fi/whatsmeow/proto/waCompanionReg"
+	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"google.golang.org/protobuf/proto"
 )
 
 // GetLogLevel returns the WhatsApp log level from environment or default to INFO
@@ -78,6 +81,10 @@ func (cm *ClientManager) loadExistingClients() error {
 			// Get or create sender record
 			senderID := device.ID.User
 			cm.ensureSenderRecord(senderID, device.ID.User)
+
+			// Set custom device name and platform type
+			store.DeviceProps.Os = proto.String(DeviceName)
+			store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_DESKTOP.Enum()
 
 			// Create client
 			clientLog := waLog.Stdout(fmt.Sprintf("Client-%s", senderID), logLevel, true)

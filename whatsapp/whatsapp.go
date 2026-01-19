@@ -14,9 +14,17 @@ import (
 	"github.com/wa-serv/handlers"
 	"github.com/wa-serv/repository"
 	"go.mau.fi/whatsmeow"
+	waCompanionReg "go.mau.fi/whatsmeow/proto/waCompanionReg"
+	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"google.golang.org/protobuf/proto"
+)
+
+const (
+	// DeviceName is the name that appears in WhatsApp's "Linked Devices" list
+	DeviceName = "Smart POS"
 )
 
 type Client struct {
@@ -53,6 +61,10 @@ func InitializeWhatsAppClient(db *sql.DB) *Client {
 		fmt.Fprintf(os.Stderr, "Failed to get device: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Set custom device name and platform type
+	store.DeviceProps.Os = proto.String(DeviceName)
+	store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_DESKTOP.Enum()
 
 	clientLog := waLog.Stdout("Client", "DEBUG", true)
 	whatsmeowClient := whatsmeow.NewClient(deviceStore, clientLog)

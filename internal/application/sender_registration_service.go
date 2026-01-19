@@ -14,8 +14,11 @@ import (
 	"github.com/wa-serv/repository"
 	"github.com/wa-serv/whatsapp"
 	"go.mau.fi/whatsmeow"
+	waCompanionReg "go.mau.fi/whatsmeow/proto/waCompanionReg"
+	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"google.golang.org/protobuf/proto"
 )
 
 // RegistrationSession tracks an ongoing registration
@@ -223,6 +226,10 @@ func (s *SenderRegistrationService) StartCodeRegistration(ctx context.Context, r
 
 	// Create a new device store for the new phone number
 	deviceStore := s.clientManager.GetContainer().NewDevice()
+
+	// Set custom device name and platform type before pairing
+	store.DeviceProps.Os = proto.String(whatsapp.DeviceName)
+	store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_DESKTOP.Enum()
 
 	logLevel := whatsapp.GetLogLevel()
 	clientLog := waLog.Stdout("RegisterSession", logLevel, true)
