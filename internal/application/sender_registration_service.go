@@ -58,6 +58,10 @@ func (s *SenderRegistrationService) StartQRRegistration(ctx context.Context) (*d
 	// Create a new device store for the new phone number
 	deviceStore := s.clientManager.GetContainer().NewDevice()
 
+	// Set custom device name and platform type before pairing
+	store.DeviceProps.Os = proto.String(whatsapp.DeviceName)
+	store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_DESKTOP.Enum()
+
 	logLevel := whatsapp.GetLogLevel()
 	clientLog := waLog.Stdout("RegisterSession", logLevel, true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
@@ -110,7 +114,7 @@ func (s *SenderRegistrationService) StartQRRegistration(ctx context.Context) (*d
 
 	// Get QR code channel - use background context to keep it alive beyond the HTTP request
 	// DO NOT use the HTTP request context here, as it will cancel when the request ends
-	qrCtx := context.Background()
+	qrCtx, cancelQR := context.WithCancel(context.Background())
 	qrChan, err := client.GetQRChannel(qrCtx)
 	if err != nil {
 		return &domain.RegisterSenderQRResponse{
@@ -180,6 +184,7 @@ func (s *SenderRegistrationService) StartQRRegistration(ctx context.Context) (*d
 	case <-time.After(10 * time.Second):
 		// Timeout waiting for QR code - increased from 5 to 10 seconds
 		fmt.Println("Timeout waiting for QR code")
+		cancelQR()
 		client.Disconnect()
 		return &domain.RegisterSenderQRResponse{
 			Success: false,

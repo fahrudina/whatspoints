@@ -220,16 +220,24 @@
                     }
                 });
 
-                const data = await response.json();
                 showSpinner(false);
 
-                if (data.success) {
-                    sessionId = data.session_id;
-                    showQR(data.qr_code);
-                    showStatus('✓ QR Code generated! Please scan with WhatsApp.', 'success');
-                    startStatusPolling();
+                if (response.ok) {
+                    const data = await response.json();
+
+                    if (data.success) {
+                        sessionId = data.session_id;
+                        showQR(data.qr_code);
+                        showStatus('✓ QR Code generated! Please scan with WhatsApp.', 'success');
+                        startStatusPolling();
+                    } else {
+                        showStatus('✗ Failed: ' + data.message, 'error');
+                        document.getElementById('startQRBtn').disabled = false;
+                        document.getElementById('startCodeBtn').disabled = false;
+                    }
                 } else {
-                    showStatus('✗ Failed: ' + data.message, 'error');
+                    const errorText = await response.text();
+                    showStatus(`✗ HTTP ${response.status} Error: ${errorText}`, 'error');
                     document.getElementById('startQRBtn').disabled = false;
                     document.getElementById('startCodeBtn').disabled = false;
                 }
@@ -261,22 +269,30 @@
                     body: JSON.stringify({ phone_number: phoneNumber })
                 });
 
-                const data = await response.json();
                 showSpinner(false);
 
-                if (data.success) {
-                    sessionId = data.session_id;
-                    showStatus(
-                        `✓ Pairing code: ${data.pairing_code}\n` +
-                        'Enter this code in WhatsApp:\n' +
-                        '1. Settings → Linked Devices → Link a Device\n' +
-                        '2. Tap "Link with phone number instead"\n' +
-                        '3. Enter the code above',
-                        'success'
-                    );
-                    startStatusPolling();
+                if (response.ok) {
+                    const data = await response.json();
+
+                    if (data.success) {
+                        sessionId = data.session_id;
+                        showStatus(
+                            `✓ Pairing code: ${data.pairing_code}\n` +
+                            'Enter this code in WhatsApp:\n' +
+                            '1. Settings → Linked Devices → Link a Device\n' +
+                            '2. Tap "Link with phone number instead"\n' +
+                            '3. Enter the code above',
+                            'success'
+                        );
+                        startStatusPolling();
+                    } else {
+                        showStatus('✗ Failed: ' + data.message, 'error');
+                        document.getElementById('startQRBtn').disabled = false;
+                        document.getElementById('startCodeBtn').disabled = false;
+                    }
                 } else {
-                    showStatus('✗ Failed: ' + data.message, 'error');
+                    const errorText = await response.text();
+                    showStatus(`✗ HTTP ${response.status} Error: ${errorText}`, 'error');
                     document.getElementById('startQRBtn').disabled = false;
                     document.getElementById('startCodeBtn').disabled = false;
                 }

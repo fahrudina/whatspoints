@@ -299,12 +299,12 @@
             <div id="method-selection">
                 <h2 style="margin-bottom: 20px;">Choose Registration Method</h2>
                 <div class="method-selector">
-                    <div class="method-card" onclick="selectMethod('qr')">
+                    <div class="method-card" onclick="selectMethod(event, 'qr')">
                         <div class="method-icon">📷</div>
                         <div class="method-title">QR Code</div>
                         <div class="method-description">Scan a QR code with your phone</div>
                     </div>
-                    <div class="method-card" onclick="selectMethod('code')">
+                    <div class="method-card" onclick="selectMethod(event, 'code')">
                         <div class="method-icon">🔢</div>
                         <div class="method-title">Pairing Code</div>
                         <div class="method-description">Enter a code sent via SMS</div>
@@ -350,14 +350,14 @@
         let currentSessionId = null;
         let statusCheckInterval = null;
 
-        function selectMethod(method) {
+        function selectMethod(e, method) {
             currentMethod = method;
             
             // Update UI
             document.querySelectorAll('.method-card').forEach(card => {
                 card.classList.remove('active');
             });
-            event.target.closest('.method-card').classList.add('active');
+            e.target.closest('.method-card').classList.add('active');
 
             // Hide method selection
             document.getElementById('method-selection').style.display = 'none';

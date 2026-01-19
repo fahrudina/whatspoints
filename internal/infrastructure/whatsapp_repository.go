@@ -63,7 +63,14 @@ func NewWhatsAppRepositoryWithClientManager(db *sql.DB, clientManager interface 
 	GetDefaultClient() (*whatsmeow.Client, error)
 	GetAllClients() map[string]*whatsmeow.Client
 }) domain.WhatsAppRepository {
-	defaultClient, _ := clientManager.GetDefaultClient()
+	// Try to get default client, but don't fail if it's not available yet
+	// The repository will handle nil client gracefully via getClient accessor
+	defaultClient, err := clientManager.GetDefaultClient()
+	if err != nil {
+		// Log but continue - getClient will handle getting a valid client later
+		fmt.Printf("No default client available during repository initialization: %v\n", err)
+		defaultClient = nil
+	}
 	return &whatsappRepository{
 		client:        defaultClient,
 		db:            db,
@@ -77,8 +84,45 @@ func (r *whatsappRepository) RegisterClient(senderID string, client *whatsmeow.C
 	r.clientMap[senderID] = client
 }
 
+// getClient safely retrieves a client, falling back to defaults if necessary
+func (r *whatsappRepository) getClient(senderID string) (*whatsmeow.Client, error) {
+	// If a specific sender is requested, try to get that client
+	if senderID != "" {
+		if r.clientManager != nil {
+			client, err := r.clientManager.GetClient(senderID)
+			if err == nil && client != nil {
+				return client, nil
+			}
+		}
+		if client, ok := r.clientMap[senderID]; ok && client != nil {
+			return client, nil
+		}
+	}
+
+	// Fall back to default client from repository
+	if r.client != nil {
+		return r.client, nil
+	}
+
+	// Try to get default client from manager
+	if r.clientManager != nil {
+		client, err := r.clientManager.GetDefaultClient()
+		if err == nil && client != nil {
+			return client, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no WhatsApp client available")
+}
+
 // SendMessage sends a WhatsApp message using the default client
 func (r *whatsappRepository) SendMessage(ctx context.Context, to, message string) (*domain.Message, error) {
+	// Get a valid client
+	client, err := r.getClient("")
+	if err != nil {
+		return nil, fmt.Errorf("no client available: %w", err)
+	}
+
 	// Parse JID
 	jid, err := types.ParseJID(to)
 	if err != nil {
@@ -91,7 +135,7 @@ func (r *whatsappRepository) SendMessage(ctx context.Context, to, message string
 	}
 
 	// Send message
-	resp, err := r.client.SendMessage(ctx, jid, msg)
+	resp, err := client.SendMessage(ctx, jid, msg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send message: %w", err)
 	}
@@ -177,13 +221,21 @@ func (r *whatsappRepository) IsConnected() bool {
 
 // IsLoggedIn checks if WhatsApp client is logged in
 func (r *whatsappRepository) IsLoggedIn() bool {
-	return r.client.IsLoggedIn()
+	client, err := r.getClient("")
+	if err != nil || client == nil {
+		return false
+	}
+	return client.IsLoggedIn()
 }
 
 // GetJID gets the WhatsApp JID
 func (r *whatsappRepository) GetJID() string {
-	if r.client.Store.ID != nil {
-		return r.client.Store.ID.String()
+	client, err := r.getClient("")
+	if err != nil || client == nil {
+		return ""
+	}
+	if client.Store.ID != nil {
+		return client.Store.ID.String()
 	}
 	return ""
 }
