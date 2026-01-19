@@ -56,6 +56,11 @@ func InitializeWhatsAppClient(db *sql.DB) *Client {
 
 	clientLog := waLog.Stdout("Client", "DEBUG", true)
 	whatsmeowClient := whatsmeow.NewClient(deviceStore, clientLog)
+
+	// Disable history sync to save bandwidth and resources
+	whatsmeowClient.EnableAutoReconnect = true
+	whatsmeowClient.AutomaticMessageRerequestFromPhone = false
+
 	whatsmeowClient.AddEventHandler(func(evt interface{}) {
 		handleEvent(evt, db, whatsmeowClient)
 	})

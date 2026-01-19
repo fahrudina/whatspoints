@@ -59,6 +59,11 @@ func (s *SenderRegistrationService) StartQRRegistration(ctx context.Context) (*d
 	clientLog := waLog.Stdout("RegisterSession", logLevel, true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 
+	// Disable history sync to save bandwidth and resources
+	// We only need to send messages, not receive history
+	client.EnableAutoReconnect = true
+	client.AutomaticMessageRerequestFromPhone = false
+
 	// Create session
 	session := &RegistrationSession{
 		SessionID: sessionID,
@@ -222,6 +227,11 @@ func (s *SenderRegistrationService) StartCodeRegistration(ctx context.Context, r
 	logLevel := whatsapp.GetLogLevel()
 	clientLog := waLog.Stdout("RegisterSession", logLevel, true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
+
+	// Disable history sync to save bandwidth and resources
+	// We only need to send messages, not receive history
+	client.EnableAutoReconnect = true
+	client.AutomaticMessageRerequestFromPhone = false
 
 	// Create session
 	session := &RegistrationSession{

@@ -83,6 +83,10 @@ func (cm *ClientManager) loadExistingClients() error {
 			clientLog := waLog.Stdout(fmt.Sprintf("Client-%s", senderID), logLevel, true)
 			client := whatsmeow.NewClient(device, clientLog)
 
+			// Disable history sync to save bandwidth and resources
+			client.EnableAutoReconnect = true
+			client.AutomaticMessageRerequestFromPhone = false
+
 			// Add event handler with client manager awareness
 			client.AddEventHandler(func(evt interface{}) {
 				cm.handleEventWithCleanup(evt, client)
@@ -390,6 +394,10 @@ func (cm *ClientManager) AddNewClient() (*whatsmeow.Client, error) {
 	clientLog := waLog.Stdout("NewClient", logLevel, true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 
+	// Disable history sync to save bandwidth and resources
+	client.EnableAutoReconnect = true
+	client.AutomaticMessageRerequestFromPhone = false
+
 	// Create channels to wait for pairing success and connection
 	pairingDone := make(chan bool, 1)
 	connectionDone := make(chan bool, 1)
@@ -499,6 +507,10 @@ func (cm *ClientManager) AddNewClientWithPairingCode(phoneNumber string) (*whats
 	logLevel := GetLogLevel()
 	clientLog := waLog.Stdout("NewClient", logLevel, true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
+
+	// Disable history sync to save bandwidth and resources
+	client.EnableAutoReconnect = true
+	client.AutomaticMessageRerequestFromPhone = false
 
 	// Add event handler with client manager awareness
 	client.AddEventHandler(func(evt interface{}) {
