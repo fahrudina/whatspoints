@@ -345,51 +345,78 @@ curl -X GET http://localhost:8080/health
 
 ### 🐳 Docker Deployment
 
-#### Build Docker Image
+#### Using Docker Compose (Recommended)
+
+The easiest way to run WhatsPoints is using Docker Compose:
+
+**1. Ensure your `.env` file is configured:**
+
+Make sure your `.env` file contains all required environment variables (see Environment Setup section above).
+
+**2. Build and start the service:**
+
+```bash
+# Build the Docker image
+docker-compose build
+
+# Start the service in detached mode
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the service
+docker-compose down
+```
+
+**3. Access the service:**
+
+The API will be available at `http://localhost:8080` (or your configured `API_PORT`).
+
+**4. QR Code Setup (First Time):**
+
+To set up WhatsApp on first run:
+
+```bash
+# View the QR code in logs
+docker-compose logs -f whatspoints
+
+# Or connect to the container to see the QR code
+docker exec -it whatspoints /bin/sh
+```
+
+Scan the QR code with WhatsApp on your phone to link the device.
+
+**Notes:**
+- WhatsApp session data persists in the `whatsapp_data` Docker volume
+- The service automatically restarts on failure
+- Health checks ensure the service is running correctly
+- If AWS credentials are not set, you'll see warnings (they're optional)
+
+#### Manual Docker Commands
+
+**Build Docker Image:**
 
 ```bash
 docker build -t whatspoints .
 ```
 
-#### Run with Docker
+**Run with Docker:**
 
 ```bash
 docker run -d --name whatspoints \
   -p 8080:8080 \
+  -v whatsapp_data:/app/data \
   -e SUPABASE_HOST=your-project.supabase.co \
   -e SUPABASE_PORT=6543 \
   -e SUPABASE_USER=postgres \
   -e SUPABASE_PASSWORD=your_password \
   -e SUPABASE_DB=postgres \
   -e SUPABASE_SSLMODE=require \
-  -e API_HOST=0.0.0.0 \
   -e API_PORT=8080 \
   -e API_USERNAME=admin \
   -e API_PASSWORD=your_secure_password \
   whatspoints
-```
-
-#### Docker Compose
-
-```yaml
-version: '3.8'
-services:
-  whatspoints:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      - SUPABASE_HOST=your-project.supabase.co
-      - SUPABASE_PORT=6543
-      - SUPABASE_USER=postgres
-      - SUPABASE_PASSWORD=your_password
-      - SUPABASE_DB=postgres
-      - SUPABASE_SSLMODE=require
-      - API_HOST=0.0.0.0
-      - API_PORT=8080
-      - API_USERNAME=admin
-      - API_PASSWORD=your_secure_password
-    restart: unless-stopped
 ```
 
 ## ⚙️ Configuration
