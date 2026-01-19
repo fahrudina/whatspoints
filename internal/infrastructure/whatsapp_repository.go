@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 
 	"github.com/wa-serv/internal/domain"
 	"github.com/wa-serv/repository"
@@ -17,6 +18,7 @@ type whatsappRepository struct {
 	client        *whatsmeow.Client // Default client for backward compatibility
 	db            *sql.DB
 	clientMap     map[string]*whatsmeow.Client // Map of sender_id -> client
+	mu            sync.RWMutex                 // Protects clientMap
 	clientManager interface {                  // Interface to get clients dynamically
 		GetClient(senderID string) (*whatsmeow.Client, error)
 		GetDefaultClient() (*whatsmeow.Client, error)
@@ -81,6 +83,8 @@ func NewWhatsAppRepositoryWithClientManager(db *sql.DB, clientManager interface 
 
 // RegisterClient registers a client for a specific sender
 func (r *whatsappRepository) RegisterClient(senderID string, client *whatsmeow.Client) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.clientMap[senderID] = client
 }
 
@@ -94,7 +98,10 @@ func (r *whatsappRepository) getClient(senderID string) (*whatsmeow.Client, erro
 				return client, nil
 			}
 		}
-		if client, ok := r.clientMap[senderID]; ok && client != nil {
+		r.mu.RLock()
+		client, ok := r.clientMap[senderID]
+		r.mu.RUnlock()
+		if ok && client != nil {
 			return client, nil
 		}
 	}
@@ -150,22 +157,10 @@ func (r *whatsappRepository) SendMessage(ctx context.Context, to, message string
 
 // SendMessageFrom sends a WhatsApp message from a specific sender
 func (r *whatsappRepository) SendMessageFrom(ctx context.Context, from, to, message string) (*domain.Message, error) {
-	var client *whatsmeow.Client
-	var ok bool
-
-	// Try to get client from clientManager first (for dynamic updates)
-	if r.clientManager != nil {
-		var err error
-		client, err = r.clientManager.GetClient(from)
-		if err != nil {
-			return nil, fmt.Errorf("sender not found: %s", from)
-		}
-	} else {
-		// Fallback to static clientMap
-		client, ok = r.clientMap[from]
-		if !ok {
-			return nil, fmt.Errorf("sender not found: %s", from)
-		}
+	// Use getClient helper to safely retrieve the client with proper nil checks
+	client, err := r.getClient(from)
+	if err != nil {
+		return nil, fmt.Errorf("sender not found or not initialized: %s", from)
 	}
 
 	// Check if client is connected

@@ -115,6 +115,12 @@ func (s *SenderRegistrationService) StartQRRegistration(ctx context.Context) (*d
 	// Get QR code channel - use background context to keep it alive beyond the HTTP request
 	// DO NOT use the HTTP request context here, as it will cancel when the request ends
 	qrCtx, cancelQR := context.WithCancel(context.Background())
+	var qrStarted bool // Track if we successfully started
+	defer func() {
+		if !qrStarted {
+			cancelQR()
+		}
+	}()
 	qrChan, err := client.GetQRChannel(qrCtx)
 	if err != nil {
 		return &domain.RegisterSenderQRResponse{
@@ -130,6 +136,7 @@ func (s *SenderRegistrationService) StartQRRegistration(ctx context.Context) (*d
 			Message: fmt.Sprintf("Failed to connect: %v", err),
 		}, err
 	}
+	qrStarted = true
 
 	// Wait for the first QR code and convert to base64 image
 	// Keep this goroutine running to handle QR refreshes
@@ -184,7 +191,6 @@ func (s *SenderRegistrationService) StartQRRegistration(ctx context.Context) (*d
 	case <-time.After(10 * time.Second):
 		// Timeout waiting for QR code - increased from 5 to 10 seconds
 		fmt.Println("Timeout waiting for QR code")
-		cancelQR()
 		client.Disconnect()
 		return &domain.RegisterSenderQRResponse{
 			Success: false,
