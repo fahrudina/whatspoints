@@ -242,8 +242,8 @@ func (r *whatsappRepository) GetJID() string {
 
 // GetSenderJID gets the WhatsApp JID for a specific sender
 func (r *whatsappRepository) GetSenderJID(senderID string) (string, error) {
-	client, ok := r.clientMap[senderID]
-	if !ok {
+	client, err := r.getClient(senderID)
+	if err != nil {
 		return "", domain.ErrSenderNotFound
 	}
 	if client.Store.ID != nil {
