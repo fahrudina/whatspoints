@@ -162,7 +162,7 @@ func (r *whatsappRepository) SendMessageFrom(ctx context.Context, from, to, mess
 	// Use getClient helper to safely retrieve the client with proper nil checks
 	client, err := r.getClient(from)
 	if err != nil {
-		return nil, fmt.Errorf("sender not found or not initialized: %s", from)
+		return nil, fmt.Errorf("sender not found or not initialized: %s: %w", from, err)
 	}
 
 	// Check if client is connected
