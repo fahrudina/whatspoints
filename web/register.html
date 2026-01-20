@@ -299,12 +299,12 @@
             <div id="method-selection">
                 <h2 style="margin-bottom: 20px;">Choose Registration Method</h2>
                 <div class="method-selector">
-                    <!-- <div class="method-card" onclick="selectMethod('qr')">
+                    <div class="method-card" onclick="selectMethod(event, 'qr')">
                         <div class="method-icon">📷</div>
                         <div class="method-title">QR Code</div>
                         <div class="method-description">Scan a QR code with your phone</div>
-                    </div> -->
-                    <div class="method-card" onclick="selectMethod('code')">
+                    </div>
+                    <div class="method-card" onclick="selectMethod(event, 'code')">
                         <div class="method-icon">🔢</div>
                         <div class="method-title">Pairing Code</div>
                         <div class="method-description">Enter a code sent via SMS</div>
@@ -350,14 +350,14 @@
         let currentSessionId = null;
         let statusCheckInterval = null;
 
-        function selectMethod(method) {
+        function selectMethod(e, method) {
             currentMethod = method;
             
             // Update UI
             document.querySelectorAll('.method-card').forEach(card => {
                 card.classList.remove('active');
             });
-            event.target.closest('.method-card').classList.add('active');
+            e.target.closest('.method-card').classList.add('active');
 
             // Hide method selection
             document.getElementById('method-selection').style.display = 'none';
@@ -522,6 +522,18 @@
 
                 const data = await response.json();
 
+                // Update QR code if it has been refreshed (for QR method)
+                if (currentMethod === 'qr' && data.status === 'pending' && data.qr_code) {
+                    const qrImg = document.querySelector('.qr-code');
+                    if (qrImg) {
+                        const newQRSrc = `data:image/png;base64,${data.qr_code}`;
+                        if (qrImg.src !== newQRSrc) {
+                            qrImg.src = newQRSrc;
+                            console.log('QR code updated');
+                        }
+                    }
+                }
+
                 if (data.status === 'connected') {
                     clearInterval(statusCheckInterval);
                     
@@ -546,6 +558,20 @@
                     statusDiv.innerHTML = `
                         <div class="status-message error">
                             ❌ Registration failed. Please try again.
+                            <br><br>
+                            <button onclick="window.location.reload()">Try Again</button>
+                        </div>
+                    `;
+                } else if (data.status === 'not_found') {
+                    clearInterval(statusCheckInterval);
+                    
+                    const statusDiv = currentMethod === 'qr' ? 
+                        document.getElementById('qr-status') : 
+                        document.getElementById('code-status');
+                    
+                    statusDiv.innerHTML = `
+                        <div class="status-message error">
+                            ❌ Session expired. Please try again.
                             <br><br>
                             <button onclick="window.location.reload()">Try Again</button>
                         </div>

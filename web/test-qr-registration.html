@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Sender Registration - QR Code Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #25D366;
+            text-align: center;
+        }
+        .qr-container {
+            text-align: center;
+            margin: 30px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+        #qrImage {
+            max-width: 300px;
+            height: auto;
+            border: 2px solid #25D366;
+            border-radius: 8px;
+            display: none;
+        }
+        .button {
+            background: #25D366;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        .button:hover {
+            background: #20bd5a;
+        }
+        .button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+        .status.info {
+            background: #e7f3ff;
+            color: #004085;
+            border-left: 4px solid #2196F3;
+            display: block;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border-left: 4px solid #28a745;
+            display: block;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid #dc3545;
+            display: block;
+        }
+        .instructions {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            border-left: 4px solid #ffc107;
+        }
+        .instructions h3 {
+            margin-top: 0;
+            color: #856404;
+        }
+        .instructions ol {
+            margin-bottom: 0;
+        }
+        .config {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-size: 12px;
+        }
+        .config input {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #25D366;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 WhatsApp Sender Registration</h1>
+        
+        <div class="config">
+            <strong>API Configuration:</strong>
+            <input type="text" id="apiUrl" placeholder="API URL" value="http://localhost:8080">
+            <input type="text" id="username" placeholder="Username" value="admin">
+            <input type="password" id="password" placeholder="Password" value="">
+        </div>
+
+        <button class="button" id="startQRBtn" onclick="startQRRegistration()">
+            🔐 Start QR Registration
+        </button>
+
+        <button class="button" id="startCodeBtn" onclick="startCodeRegistration()">
+            📱 Start Code Registration
+        </button>
+
+        <div class="qr-container">
+            <div class="spinner" id="spinner"></div>
+            <img id="qrImage" alt="QR Code">
+            <p id="qrText" style="display:none; margin-top: 10px; color: #666;">
+                Scan this QR code with WhatsApp
+            </p>
+        </div>
+
+        <div id="statusMessage" class="status"></div>
+
+        <div class="instructions">
+            <h3>📖 Instructions:</h3>
+            <ol>
+                <li>Enter your API credentials above</li>
+                <li>Click "Start QR Registration"</li>
+                <li>Open WhatsApp on your phone</li>
+                <li>Go to Settings → Linked Devices</li>
+                <li>Tap "Link a Device"</li>
+                <li>Scan the QR code displayed above</li>
+                <li>Wait for confirmation</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        let sessionId = null;
+        let pollInterval = null;
+
+        function getAuthHeader() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            return 'Basic ' + btoa(username + ':' + password);
+        }
+
+        function getApiUrl() {
+            return document.getElementById('apiUrl').value;
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + type;
+        }
+
+        function showSpinner(show) {
+            document.getElementById('spinner').style.display = show ? 'block' : 'none';
+        }
+
+        function showQR(base64Image) {
+            const qrImage = document.getElementById('qrImage');
+            const qrText = document.getElementById('qrText');
+            
+            if (base64Image) {
+                qrImage.src = 'data:image/png;base64,' + base64Image;
+                qrImage.style.display = 'block';
+                qrText.style.display = 'block';
+            } else {
+                qrImage.style.display = 'none';
+                qrText.style.display = 'none';
+            }
+        }
+
+        async function startQRRegistration() {
+            try {
+                document.getElementById('startQRBtn').disabled = true;
+                document.getElementById('startCodeBtn').disabled = true;
+                showSpinner(true);
+                showStatus('Generating QR code...', 'info');
+                showQR(null);
+
+                const response = await fetch(getApiUrl() + '/api/register-sender-qr', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': getAuthHeader(),
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                showSpinner(false);
+
+                if (response.ok) {
+                    const data = await response.json();
+
+                    if (data.success) {
+                        sessionId = data.session_id;
+                        showQR(data.qr_code);
+                        showStatus('✓ QR Code generated! Please scan with WhatsApp.', 'success');
+                        startStatusPolling();
+                    } else {
+                        showStatus('✗ Failed: ' + data.message, 'error');
+                        document.getElementById('startQRBtn').disabled = false;
+                        document.getElementById('startCodeBtn').disabled = false;
+                    }
+                } else {
+                    const errorText = await response.text();
+                    showStatus(`✗ HTTP ${response.status} Error: ${errorText}`, 'error');
+                    document.getElementById('startQRBtn').disabled = false;
+                    document.getElementById('startCodeBtn').disabled = false;
+                }
+            } catch (error) {
+                showSpinner(false);
+                showStatus('✗ Error: ' + error.message, 'error');
+                document.getElementById('startQRBtn').disabled = false;
+                document.getElementById('startCodeBtn').disabled = false;
+            }
+        }
+
+        async function startCodeRegistration() {
+            const phoneNumber = prompt('Enter phone number with country code (e.g., +1234567890):');
+            if (!phoneNumber) return;
+
+            try {
+                document.getElementById('startQRBtn').disabled = true;
+                document.getElementById('startCodeBtn').disabled = true;
+                showSpinner(true);
+                showStatus('Requesting pairing code...', 'info');
+                showQR(null);
+
+                const response = await fetch(getApiUrl() + '/api/register-sender-code', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': getAuthHeader(),
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ phone_number: phoneNumber })
+                });
+
+                showSpinner(false);
+
+                if (response.ok) {
+                    const data = await response.json();
+
+                    if (data.success) {
+                        sessionId = data.session_id;
+                        showStatus(
+                            `✓ Pairing code: ${data.pairing_code}\n` +
+                            'Enter this code in WhatsApp:\n' +
+                            '1. Settings → Linked Devices → Link a Device\n' +
+                            '2. Tap "Link with phone number instead"\n' +
+                            '3. Enter the code above',
+                            'success'
+                        );
+                        startStatusPolling();
+                    } else {
+                        showStatus('✗ Failed: ' + data.message, 'error');
+                        document.getElementById('startQRBtn').disabled = false;
+                        document.getElementById('startCodeBtn').disabled = false;
+                    }
+                } else {
+                    const errorText = await response.text();
+                    showStatus(`✗ HTTP ${response.status} Error: ${errorText}`, 'error');
+                    document.getElementById('startQRBtn').disabled = false;
+                    document.getElementById('startCodeBtn').disabled = false;
+                }
+            } catch (error) {
+                showSpinner(false);
+                showStatus('✗ Error: ' + error.message, 'error');
+                document.getElementById('startQRBtn').disabled = false;
+                document.getElementById('startCodeBtn').disabled = false;
+            }
+        }
+
+        async function checkStatus() {
+            if (!sessionId) return;
+
+            try {
+                const response = await fetch(
+                    getApiUrl() + '/api/register-sender-status/' + sessionId,
+                    {
+                        headers: {
+                            'Authorization': getAuthHeader()
+                        }
+                    }
+                );
+
+                const data = await response.json();
+
+                if (data.status === 'connected') {
+                    stopStatusPolling();
+                    showQR(null);
+                    showStatus(
+                        '✓ SUCCESS! Registration complete!\n' +
+                        'Sender ID: ' + data.sender_id + '\n' +
+                        'You can now use this sender to send messages.',
+                        'success'
+                    );
+                    document.getElementById('startQRBtn').disabled = false;
+                    document.getElementById('startCodeBtn').disabled = false;
+                } else if (data.status === 'failed') {
+                    stopStatusPolling();
+                    showQR(null);
+                    showStatus('✗ Registration failed. Please try again.', 'error');
+                    document.getElementById('startQRBtn').disabled = false;
+                    document.getElementById('startCodeBtn').disabled = false;
+                } else if (data.status === 'pending') {
+                    // Update QR code if it changed (QR codes can refresh)
+                    if (data.qr_code) {
+                        showQR(data.qr_code);
+                    }
+                    showStatus('⏳ Waiting for WhatsApp scan/pairing...', 'info');
+                }
+            } catch (error) {
+                console.error('Status check error:', error);
+            }
+        }
+
+        function startStatusPolling() {
+            // Poll every 2 seconds
+            pollInterval = setInterval(checkStatus, 2000);
+        }
+
+        function stopStatusPolling() {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', stopStatusPolling);
+    </script>
+</body>
+</html>

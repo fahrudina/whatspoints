@@ -141,12 +141,8 @@ func initializeDatabase() {
 		os.Exit(1)
 	}
 
-	// Initialize Whatsmeow session storage tables
-	if err := database.InitWhatsmeowTables(db); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize Whatsmeow tables: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Println("Whatsmeow session storage tables initialized successfully")
+	// Note: Whatsmeow session storage tables are automatically initialized by sqlstore.New()
+	// in the ClientManager, so we don't need to manually create them here
 	fmt.Println("All tables initialized successfully")
 }
 
@@ -370,10 +366,7 @@ func setupAndAddSender(addFunc func(*whatsapp.ClientManager) error) {
 		os.Exit(1)
 	}
 
-	if err := database.InitWhatsmeowTables(db); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize Whatsmeow tables: %v\n", err)
-		os.Exit(1)
-	}
+	// Note: Whatsmeow tables are automatically created by sqlstore.New() in ClientManager
 
 	// Create ClientManager
 	clientManager, err := whatsapp.NewClientManager(db, connectionString)

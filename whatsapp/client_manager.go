@@ -12,9 +12,12 @@ import (
 	"github.com/mdp/qrterminal/v3"
 	"github.com/wa-serv/repository"
 	"go.mau.fi/whatsmeow"
+	waCompanionReg "go.mau.fi/whatsmeow/proto/waCompanionReg"
+	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"google.golang.org/protobuf/proto"
 )
 
 // GetLogLevel returns the WhatsApp log level from environment or default to INFO
@@ -79,9 +82,17 @@ func (cm *ClientManager) loadExistingClients() error {
 			senderID := device.ID.User
 			cm.ensureSenderRecord(senderID, device.ID.User)
 
+			// Set custom device name and platform type
+			store.DeviceProps.Os = proto.String(DeviceName)
+			store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_DESKTOP.Enum()
+
 			// Create client
 			clientLog := waLog.Stdout(fmt.Sprintf("Client-%s", senderID), logLevel, true)
 			client := whatsmeow.NewClient(device, clientLog)
+
+			// Disable history sync to save bandwidth and resources
+			client.EnableAutoReconnect = true
+			client.AutomaticMessageRerequestFromPhone = false
 
 			// Add event handler with client manager awareness
 			client.AddEventHandler(func(evt interface{}) {
@@ -196,18 +207,34 @@ func (cm *ClientManager) AddExistingClient(client *whatsmeow.Client, senderID st
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
+	log.Printf("Adding existing client to manager: %s", senderID)
+
 	// Add to clients map
 	cm.clients[senderID] = client
 
 	// Set as default if it's the first one
 	if cm.defaultSenderID == "" {
 		cm.defaultSenderID = senderID
+		log.Printf("Set %s as default sender", senderID)
+		// Update database to reflect this
+		if err := repository.SetDefaultSender(cm.db, senderID); err != nil {
+			log.Printf("Failed to set default sender in DB: %v", err)
+		}
+	}
+
+	// Mark sender as active in the database
+	if err := repository.UpdateSenderStatus(cm.db, senderID, true); err != nil {
+		log.Printf("Failed to update sender status: %v", err)
+	} else {
+		log.Printf("Marked sender %s as active", senderID)
 	}
 
 	// Add event handler for ongoing message handling with cleanup
 	client.AddEventHandler(func(evt interface{}) {
 		cm.handleEventWithCleanup(evt, client)
 	})
+
+	log.Printf("✓ Successfully added client %s to manager (total clients: %d)", senderID, len(cm.clients))
 }
 
 // handleEventWithCleanup handles events and performs cleanup for logout events
@@ -390,6 +417,10 @@ func (cm *ClientManager) AddNewClient() (*whatsmeow.Client, error) {
 	clientLog := waLog.Stdout("NewClient", logLevel, true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 
+	// Disable history sync to save bandwidth and resources
+	client.EnableAutoReconnect = true
+	client.AutomaticMessageRerequestFromPhone = false
+
 	// Create channels to wait for pairing success and connection
 	pairingDone := make(chan bool, 1)
 	connectionDone := make(chan bool, 1)
@@ -499,6 +530,10 @@ func (cm *ClientManager) AddNewClientWithPairingCode(phoneNumber string) (*whats
 	logLevel := GetLogLevel()
 	clientLog := waLog.Stdout("NewClient", logLevel, true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
+
+	// Disable history sync to save bandwidth and resources
+	client.EnableAutoReconnect = true
+	client.AutomaticMessageRerequestFromPhone = false
 
 	// Add event handler with client manager awareness
 	client.AddEventHandler(func(evt interface{}) {

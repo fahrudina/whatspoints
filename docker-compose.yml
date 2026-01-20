@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  whatspoints:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whatspoints
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      # Database Configuration (Supabase/PostgreSQL)
+      SUPABASE_HOST: ${SUPABASE_HOST}
+      SUPABASE_PORT: ${SUPABASE_PORT:-5432}
+      SUPABASE_USER: ${SUPABASE_USER}
+      SUPABASE_PASSWORD: ${SUPABASE_PASSWORD}
+      SUPABASE_DB: ${SUPABASE_DB:-postgres}
+      SUPABASE_SSLMODE: ${SUPABASE_SSLMODE:-require}
+      
+      # API Configuration
+      API_PORT: "8080"
+      API_USERNAME: ${API_USERNAME:-admin}
+      API_PASSWORD: ${API_PASSWORD}
+      
+      # AWS S3 Configuration (Optional)
+      AWS_REGION: ${AWS_REGION}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      
+      # WhatsApp Configuration
+      ALLOWED_PHONE_NUMBERS: ${ALLOWED_PHONE_NUMBERS}
+    volumes:
+      # Persist WhatsApp session data
+      - whatsapp_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  whatsapp_data:
+    driver: local

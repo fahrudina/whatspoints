@@ -14,8 +14,11 @@ import (
 	"github.com/wa-serv/repository"
 	"github.com/wa-serv/whatsapp"
 	"go.mau.fi/whatsmeow"
+	waCompanionReg "go.mau.fi/whatsmeow/proto/waCompanionReg"
+	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"google.golang.org/protobuf/proto"
 )
 
 // RegistrationSession tracks an ongoing registration
@@ -33,10 +36,10 @@ type RegistrationSession struct {
 
 // SenderRegistrationService implements sender registration business logic
 type SenderRegistrationService struct {
-	db              *sql.DB
-	clientManager   *whatsapp.ClientManager
-	sessions        map[string]*RegistrationSession
-	sessionsMu      sync.RWMutex
+	db            *sql.DB
+	clientManager *whatsapp.ClientManager
+	sessions      map[string]*RegistrationSession
+	sessionsMu    sync.RWMutex
 }
 
 // NewSenderRegistrationService creates a new sender registration service
@@ -54,10 +57,19 @@ func (s *SenderRegistrationService) StartQRRegistration(ctx context.Context) (*d
 
 	// Create a new device store for the new phone number
 	deviceStore := s.clientManager.GetContainer().NewDevice()
-	
+
+	// Set custom device name and platform type before pairing
+	store.DeviceProps.Os = proto.String(whatsapp.DeviceName)
+	store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_DESKTOP.Enum()
+
 	logLevel := whatsapp.GetLogLevel()
 	clientLog := waLog.Stdout("RegisterSession", logLevel, true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
+
+	// Disable history sync to save bandwidth and resources
+	// We only need to send messages, not receive history
+	client.EnableAutoReconnect = true
+	client.AutomaticMessageRerequestFromPhone = false
 
 	// Create session
 	session := &RegistrationSession{
@@ -100,9 +112,23 @@ func (s *SenderRegistrationService) StartQRRegistration(ctx context.Context) (*d
 		whatsapp.HandleEvent(evt, s.db, client)
 	})
 
-	// Get QR code channel
-	qrChan, _ := client.GetQRChannel(ctx)
-	
+	// Get QR code channel - use background context to keep it alive beyond the HTTP request
+	// DO NOT use the HTTP request context here, as it will cancel when the request ends
+	qrCtx, cancelQR := context.WithCancel(context.Background())
+	var qrStarted bool // Track if we successfully started
+	defer func() {
+		if !qrStarted {
+			cancelQR()
+		}
+	}()
+	qrChan, err := client.GetQRChannel(qrCtx)
+	if err != nil {
+		return &domain.RegisterSenderQRResponse{
+			Success: false,
+			Message: fmt.Sprintf("Failed to get QR channel: %v", err),
+		}, err
+	}
+
 	// Connect the client
 	if err := client.Connect(); err != nil {
 		return &domain.RegisterSenderQRResponse{
@@ -110,27 +136,67 @@ func (s *SenderRegistrationService) StartQRRegistration(ctx context.Context) (*d
 			Message: fmt.Sprintf("Failed to connect: %v", err),
 		}, err
 	}
+	qrStarted = true
 
 	// Wait for the first QR code and convert to base64 image
+	// Keep this goroutine running to handle QR refreshes
+	firstQRReceived := make(chan bool, 1)
 	go func() {
+		defer fmt.Println("QR goroutine exiting")
 		for evt := range qrChan {
 			if evt.Event == "code" {
+				fmt.Printf("QR Code received from WhatsApp, raw code length: %d\n", len(evt.Code))
 				// Generate QR code as PNG image
 				qrBytes := generateQRCodePNG(evt.Code)
+				if len(qrBytes) == 0 {
+					fmt.Println("Error: Failed to generate QR code PNG")
+					continue
+				}
+
+				qrBase64 := base64.StdEncoding.EncodeToString(qrBytes)
+
 				session.mu.Lock()
-				session.QRCode = base64.StdEncoding.EncodeToString(qrBytes)
+				session.QRCode = qrBase64
 				session.mu.Unlock()
+
+				fmt.Printf("QR Code PNG generated and stored (base64 length: %d bytes)\n", len(qrBase64))
+
+				// Signal that first QR is ready
+				select {
+				case firstQRReceived <- true:
+					fmt.Println("First QR code signaled")
+				default:
+					fmt.Println("QR code updated (not first)")
+					// Subsequent QR codes don't need to signal
+				}
 			} else if evt.Event == "success" {
+				fmt.Println("QR Code scan successful!")
 				session.mu.Lock()
 				session.Status = "connected"
 				session.mu.Unlock()
-				break
+				// Don't break here - let the channel close naturally
+				fmt.Println("Waiting for pairing to complete...")
+			} else {
+				fmt.Printf("QR Event: %s\n", evt.Event)
 			}
 		}
+		fmt.Println("QR Channel closed")
 	}()
 
-	// Wait a moment for the first QR code
-	time.Sleep(1 * time.Second)
+	// Wait for the first QR code with timeout
+	select {
+	case <-firstQRReceived:
+		// QR code ready
+		fmt.Println("QR code ready to be returned to client")
+	case <-time.After(10 * time.Second):
+		// Timeout waiting for QR code - increased from 5 to 10 seconds
+		fmt.Println("Timeout waiting for QR code")
+		client.Disconnect()
+		return &domain.RegisterSenderQRResponse{
+			Success: false,
+			Message: "Timeout waiting for QR code generation",
+		}, fmt.Errorf("timeout waiting for QR code")
+	}
 
 	// Store session
 	s.sessionsMu.Lock()
@@ -140,10 +206,17 @@ func (s *SenderRegistrationService) StartQRRegistration(ctx context.Context) (*d
 	// Clean up old sessions (older than 10 minutes)
 	go s.cleanupOldSessions()
 
+	// Get the QR code from session
+	session.mu.RLock()
+	qrCode := session.QRCode
+	session.mu.RUnlock()
+
+	fmt.Printf("Returning QR code response (base64 length: %d)\n", len(qrCode))
+
 	return &domain.RegisterSenderQRResponse{
 		Success:   true,
 		SessionID: sessionID,
-		QRCode:    session.QRCode,
+		QRCode:    qrCode,
 		Message:   "QR code generated. Please scan with WhatsApp.",
 	}, nil
 }
@@ -164,10 +237,19 @@ func (s *SenderRegistrationService) StartCodeRegistration(ctx context.Context, r
 
 	// Create a new device store for the new phone number
 	deviceStore := s.clientManager.GetContainer().NewDevice()
-	
+
+	// Set custom device name and platform type before pairing
+	store.DeviceProps.Os = proto.String(whatsapp.DeviceName)
+	store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_DESKTOP.Enum()
+
 	logLevel := whatsapp.GetLogLevel()
 	clientLog := waLog.Stdout("RegisterSession", logLevel, true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
+
+	// Disable history sync to save bandwidth and resources
+	// We only need to send messages, not receive history
+	client.EnableAutoReconnect = true
+	client.AutomaticMessageRerequestFromPhone = false
 
 	// Create session
 	session := &RegistrationSession{
@@ -289,10 +371,10 @@ func (s *SenderRegistrationService) GetRegistrationStatus(ctx context.Context, s
 		s.sessionsMu.Unlock()
 	}
 
-	// Include updated QR code if available
-	if qrCode != "" {
-		// Note: We don't send QR code in status response to reduce payload
-		// Client should use the initial QR code
+	// Include updated QR code for pending registrations (QR codes can refresh)
+	if status == "pending" && qrCode != "" {
+		// QR codes expire and refresh, so we need to send the latest one
+		response.QRCode = qrCode
 	}
 
 	return response, nil
@@ -301,7 +383,7 @@ func (s *SenderRegistrationService) GetRegistrationStatus(ctx context.Context, s
 // registerSender creates a sender record in the database
 func (s *SenderRegistrationService) registerSender(senderID, phoneNumber string) {
 	name := fmt.Sprintf("Sender %s", senderID)
-	
+
 	// Check if this is the first sender (make it default)
 	senders, err := repository.GetAllSenders(s.db)
 	isDefault := err != nil || len(senders) == 0
@@ -341,11 +423,13 @@ func cleanPhoneNumber(phone string) string {
 
 // generateQRCodePNG generates a QR code as PNG bytes
 func generateQRCodePNG(code string) []byte {
-	// Generate QR code as PNG image
-	png, err := qrcode.Encode(code, qrcode.Medium, 256)
+	// Generate QR code as PNG image with higher error correction for better scanning
+	// Use High error correction level and larger size for WhatsApp QR codes
+	png, err := qrcode.Encode(code, qrcode.High, 512)
 	if err != nil {
 		fmt.Printf("Failed to generate QR code: %v\n", err)
 		return []byte{}
 	}
+	fmt.Printf("Generated QR code PNG: %d bytes for code: %s\n", len(png), code[:20]+"...")
 	return png
 }

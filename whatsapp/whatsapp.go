@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq" // PostgreSQL driver for Supabase
@@ -14,9 +15,17 @@ import (
 	"github.com/wa-serv/handlers"
 	"github.com/wa-serv/repository"
 	"go.mau.fi/whatsmeow"
+	waCompanionReg "go.mau.fi/whatsmeow/proto/waCompanionReg"
+	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"google.golang.org/protobuf/proto"
+)
+
+const (
+	// DeviceName is the name that appears in WhatsApp's "Linked Devices" list
+	DeviceName = "Smart POS"
 )
 
 type Client struct {
@@ -54,8 +63,17 @@ func InitializeWhatsAppClient(db *sql.DB) *Client {
 		os.Exit(1)
 	}
 
+	// Set custom device name and platform type
+	store.DeviceProps.Os = proto.String(DeviceName)
+	store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_DESKTOP.Enum()
+
 	clientLog := waLog.Stdout("Client", "DEBUG", true)
 	whatsmeowClient := whatsmeow.NewClient(deviceStore, clientLog)
+
+	// Disable history sync to save bandwidth and resources
+	whatsmeowClient.EnableAutoReconnect = true
+	whatsmeowClient.AutomaticMessageRerequestFromPhone = false
+
 	whatsmeowClient.AddEventHandler(func(evt interface{}) {
 		handleEvent(evt, db, whatsmeowClient)
 	})
@@ -110,6 +128,10 @@ func HandleEvent(evt interface{}, db *sql.DB, client *whatsmeow.Client) {
 		handleStreamReplaced(client)
 	case *events.StreamError:
 		handleStreamError(v, client)
+	case *events.KeepAliveTimeout:
+		handleKeepAliveTimeout(v, client)
+	case *events.KeepAliveRestored:
+		handleKeepAliveRestored(client)
 	}
 }
 
@@ -158,6 +180,30 @@ func handleStreamError(evt *events.StreamError, client *whatsmeow.Client) {
 
 	// Stream errors (like 503) are typically handled by automatic reconnection
 	// Only log for monitoring purposes - the client will attempt to reconnect
+}
+
+// handleKeepAliveTimeout handles keepalive timeout events
+func handleKeepAliveTimeout(evt *events.KeepAliveTimeout, client *whatsmeow.Client) {
+	if client.Store.ID != nil {
+		senderID := client.Store.ID.User
+		log.Printf("⚠ Client %s - keepalive timeout (error count: %d, last success: %v ago)",
+			senderID, evt.ErrorCount, time.Since(evt.LastSuccess))
+	} else {
+		log.Printf("⚠ Keepalive timeout (error count: %d, last success: %v ago)",
+			evt.ErrorCount, time.Since(evt.LastSuccess))
+	}
+	// Note: whatsmeow will automatically force reconnect after 3 minutes of keepalive failures
+	// when EnableAutoReconnect is true (which is the default)
+}
+
+// handleKeepAliveRestored handles keepalive restored events
+func handleKeepAliveRestored(client *whatsmeow.Client) {
+	if client.Store.ID != nil {
+		senderID := client.Store.ID.User
+		log.Printf("✓ Client %s - keepalive connection restored", senderID)
+	} else {
+		log.Println("✓ Keepalive connection restored")
+	}
 }
 
 // handleLogout handles the LoggedOut event

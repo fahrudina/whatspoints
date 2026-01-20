@@ -52,17 +52,8 @@ func NewAPIServer(db *sql.DB, client *whatsmeow.Client, username, password strin
 
 // NewAPIServerWithClientManager creates a new API server with multi-client support
 func NewAPIServerWithClientManager(db *sql.DB, clientManager *whatsapp.ClientManager, username, password string, port string) *APIServer {
-	// Get default client and all clients
-	defaultClient, err := clientManager.GetDefaultClient()
-	if err != nil {
-		// Fallback to nil if no default client
-		defaultClient = nil
-	}
-
-	allClients := clientManager.GetAllClients()
-
-	// Infrastructure layer - use repository with multiple clients
-	whatsappRepo := infrastructure.NewWhatsAppRepositoryWithClients(defaultClient, db, allClients)
+	// Infrastructure layer - use repository with client manager for dynamic client updates
+	whatsappRepo := infrastructure.NewWhatsAppRepositoryWithClientManager(db, clientManager)
 
 	// Application layer
 	messageService := application.NewMessageService(whatsappRepo)

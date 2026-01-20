@@ -39,3 +39,6 @@ whatsappdata.db
 # build directories
 /build/
 /dist/
+
+*.sumopod
+*.tencent

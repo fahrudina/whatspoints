@@ -51,9 +51,9 @@ type RegisterSenderQRRequest struct {
 // RegisterSenderQRResponse represents the response for QR registration
 type RegisterSenderQRResponse struct {
 	Success   bool   `json:"success"`
-	SessionID string `json:"session_id"`          // Session ID for status checking
-	QRCode    string `json:"qr_code,omitempty"`   // Base64 encoded QR code image
-	Message   string `json:"message,omitempty"`   // Status or error message
+	SessionID string `json:"session_id"`        // Session ID for status checking
+	QRCode    string `json:"qr_code,omitempty"` // Base64 encoded QR code image
+	Message   string `json:"message,omitempty"` // Status or error message
 }
 
 // RegisterSenderCodeRequest represents the request to register with pairing code
@@ -63,17 +63,18 @@ type RegisterSenderCodeRequest struct {
 
 // RegisterSenderCodeResponse represents the response for code registration
 type RegisterSenderCodeResponse struct {
-	Success      bool   `json:"success"`
-	SessionID    string `json:"session_id"`          // Session ID for status checking
-	PairingCode  string `json:"pairing_code,omitempty"` // The pairing code to enter in WhatsApp
-	PhoneNumber  string `json:"phone_number,omitempty"` // Phone number being registered
-	Message      string `json:"message,omitempty"`   // Status or error message
+	Success     bool   `json:"success"`
+	SessionID   string `json:"session_id"`             // Session ID for status checking
+	PairingCode string `json:"pairing_code,omitempty"` // The pairing code to enter in WhatsApp
+	PhoneNumber string `json:"phone_number,omitempty"` // Phone number being registered
+	Message     string `json:"message,omitempty"`      // Status or error message
 }
 
 // RegistrationStatusResponse represents the status of a registration session
 type RegistrationStatusResponse struct {
-	Success   bool   `json:"success"`
-	Status    string `json:"status"`              // pending, connected, failed
-	SenderID  string `json:"sender_id,omitempty"` // Set when successfully connected
-	Message   string `json:"message,omitempty"`   // Status or error message
+	Success  bool   `json:"success"`
+	Status   string `json:"status"`              // pending, connected, failed
+	SenderID string `json:"sender_id,omitempty"` // Set when successfully connected
+	QRCode   string `json:"qr_code,omitempty"`   // Updated QR code (for refresh scenarios)
+	Message  string `json:"message,omitempty"`   // Status or error message
 }
