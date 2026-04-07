@@ -25,7 +25,7 @@ import (
 
 const (
 	// DeviceName is the name that appears in WhatsApp's "Linked Devices" list
-	DeviceName = "Smart POS"
+	DeviceName = "Google Chrome (SM POS)"
 )
 
 type Client struct {
