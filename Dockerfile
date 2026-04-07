@@ -1,5 +1,5 @@
 # Use the official Golang image as the base image
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install build dependencies (gcc and musl-dev needed for CGO with SQLite)
 RUN apk add --no-cache \
