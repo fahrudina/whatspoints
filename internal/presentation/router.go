@@ -51,10 +51,12 @@ func (r *Router) SetupRoutes() *gin.Engine {
 	fmt.Printf("Using web directory: %s\n", webDir)
 
 	// Serve static files for the web UI (no auth required)
-	indexPath := filepath.Join(webDir, "index.html")
+	landingPath := filepath.Join(webDir, "landing.html")
+	dashboardPath := filepath.Join(webDir, "index.html")
 	registerPath := filepath.Join(webDir, "register.html")
 
-	router.StaticFile("/", indexPath)
+	router.StaticFile("/", landingPath)
+	router.StaticFile("/dashboard", dashboardPath)
 	router.StaticFile("/register", registerPath)
 	router.Static("/web", webDir)
 
@@ -76,7 +78,7 @@ func (r *Router) SetupRoutes() *gin.Engine {
 
 	// Fallback for SPA routing
 	router.NoRoute(func(c *gin.Context) {
-		c.File(indexPath)
+		c.File(landingPath)
 	})
 
 	return router

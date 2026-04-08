@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="facebook-domain-verification" content="8pbka6gmohje18asgompqkx420ojtu" />
+    <meta name="description" content="WhatsPoints - Modern WhatsApp API Service with Clean Architecture. Send messages via REST API, manage multiple senders, and integrate WhatsApp into your applications.">
+    <meta name="keywords" content="WhatsApp API, Go, REST API, messaging service, WhatsApp integration, multiple senders">
+    <title>WhatsPoints - Modern WhatsApp API Service</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            padding: 60px 20px;
+            animation: fadeInDown 0.8s ease-out;
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        h1 {
+            font-size: 3em;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+
+        .tagline {
+            font-size: 1.3em;
+            opacity: 0.95;
+            margin-bottom: 30px;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background: white;
+            color: #667eea;
+            padding: 15px 40px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1em;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .features {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            margin: 40px 0;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+            animation: fadeInUp 0.8s ease-out 0.2s both;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .features h2 {
+            text-align: center;
+            margin-bottom: 40px;
+            color: #667eea;
+            font-size: 2em;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+        }
+
+        .feature-card {
+            padding: 25px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2);
+        }
+
+        .feature-icon {
+            font-size: 2.5em;
+            margin-bottom: 15px;
+        }
+
+        .feature-card h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+
+        .feature-card p {
+            color: #6c757d;
+            font-size: 0.95em;
+        }
+
+        .api-section {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            margin: 40px 0;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+            animation: fadeInUp 0.8s ease-out 0.4s both;
+        }
+
+        .api-section h2 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #667eea;
+            font-size: 2em;
+        }
+
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .code-block code {
+            color: #68d391;
+        }
+
+        .endpoint-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .endpoint-list li {
+            padding: 15px;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .endpoint-method {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+
+        .tech-stack {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            margin: 40px 0;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+            animation: fadeInUp 0.8s ease-out 0.6s both;
+        }
+
+        .tech-stack h2 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #667eea;
+            font-size: 2em;
+        }
+
+        .tech-items {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .tech-item {
+            background: #f8f9fa;
+            padding: 15px 25px;
+            border-radius: 50px;
+            font-weight: 600;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+
+        footer {
+            text-align: center;
+            color: white;
+            padding: 40px 20px;
+            opacity: 0.9;
+        }
+
+        .footer-links {
+            margin-top: 20px;
+        }
+
+        .footer-links a {
+            color: white;
+            text-decoration: none;
+            margin: 0 15px;
+            transition: opacity 0.3s ease;
+        }
+
+        .footer-links a:hover {
+            opacity: 0.8;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2em;
+            }
+
+            .tagline {
+                font-size: 1.1em;
+            }
+
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📱 WhatsPoints</h1>
+            <p class="tagline">Modern WhatsApp API Service with Clean Architecture</p>
+            <a href="/dashboard" class="cta-button">Access Dashboard</a>
+        </header>
+
+        <section class="features">
+            <h2>✨ Powerful Features</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🚀</div>
+                    <h3>REST API</h3>
+                    <p>Simple HTTP endpoints for sending messages and checking status</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">👥</div>
+                    <h3>Multiple Senders</h3>
+                    <p>Register and manage multiple WhatsApp sender accounts</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Secure</h3>
+                    <p>HTTP Basic Authentication for API security</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🏗️</div>
+                    <h3>Clean Architecture</h3>
+                    <p>Domain-driven design with proper separation of concerns</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🗄️</div>
+                    <h3>PostgreSQL Integration</h3>
+                    <p>Supabase integration with session storage</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🧪</div>
+                    <h3>Well Tested</h3>
+                    <p>Comprehensive test suite with mocks</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="api-section">
+            <h2>🔌 API Endpoints</h2>
+            <ul class="endpoint-list">
+                <li>
+                    <span class="endpoint-method">POST</span>
+                    <strong>/api/send-message</strong> - Send WhatsApp messages
+                </li>
+                <li>
+                    <span class="endpoint-method">GET</span>
+                    <strong>/api/status</strong> - Check WhatsApp connection status
+                </li>
+                <li>
+                    <span class="endpoint-method">GET</span>
+                    <strong>/api/senders</strong> - List all registered senders
+                </li>
+                <li>
+                    <span class="endpoint-method">GET</span>
+                    <strong>/health</strong> - Health check endpoint
+                </li>
+            </ul>
+
+            <h3 style="margin-top: 30px; color: #667eea;">Quick Start Example</h3>
+            <div class="code-block">
+                <code>curl -X POST http://localhost:8080/api/send-message \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{"to": "+1234567890", "message": "Hello from WhatsPoints!"}'</code>
+            </div>
+        </section>
+
+        <section class="tech-stack">
+            <h2>🛠️ Built With</h2>
+            <div class="tech-items">
+                <div class="tech-item">Go 1.21+</div>
+                <div class="tech-item">Whatsmeow</div>
+                <div class="tech-item">Gin Framework</div>
+                <div class="tech-item">PostgreSQL</div>
+                <div class="tech-item">Supabase</div>
+                <div class="tech-item">Docker</div>
+            </div>
+        </section>
+
+        <footer>
+            <p>&copy; 2026 WhatsPoints. A modern WhatsApp messaging service.</p>
+            <div class="footer-links">
+                <a href="https://github.com/fahrudina/whatspoints" target="_blank">GitHub</a>
+                <a href="/dashboard">Dashboard</a>
+                <a href="/health">Health Check</a>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>
