@@ -15,10 +15,12 @@ CREATE TABLE IF NOT EXISTS knowledge_base (
 );
 
 -- Approximate nearest-neighbour index for cosine similarity search.
+-- HNSW (not ivfflat): needs no training data, handles incremental inserts, and
+-- can be created up front on an empty table. vector_cosine_ops matches the
+-- cosine distance operator (<=>) used by the retrieval queries.
 CREATE INDEX IF NOT EXISTS knowledge_base_embedding_idx
 ON knowledge_base
-USING ivfflat (embedding vector_cosine_ops)
-WITH (lists = 100);
+USING hnsw (embedding vector_cosine_ops);
 
 -- Optional seed data. Embeddings are NULL until you run index_knowledge.py.
 INSERT INTO knowledge_base (title, content, category)

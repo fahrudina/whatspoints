@@ -610,6 +610,11 @@ psql "$DATABASE_URL" -f database/vector_schema.sql
 # On Supabase you can paste database/vector_schema.sql into the SQL editor.
 ```
 
+This enables the `vector` extension and creates `knowledge_base` with a
+`VECTOR(1536)` column and an **HNSW** cosine index. HNSW (rather than IVFFlat) is
+used because it needs no training data, handles incremental inserts, and can be
+created up front — so you don't have to rebuild the index after adding rows.
+
 ### 2. Insert knowledge
 
 ```sql
