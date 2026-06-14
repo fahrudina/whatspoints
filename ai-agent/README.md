@@ -87,6 +87,23 @@ Safe to rerun — it only touches rows where `embedding IS NULL`. **No service
 restart is needed** after inserting + indexing new data; retrieval queries
 pgvector on every request.
 
+### Ingesting documents
+
+To load a whole document instead of inserting rows by hand, use
+`ingest_document.py`. It reads a `.txt`, `.md`, or `.pdf` file, splits it into
+~900-char chunks, inserts each chunk as a `knowledge_base` row, then embeds them
+(reusing the step above). No schema change — chunks are ordinary rows.
+
+```bash
+python ingest_document.py path/to/price-list.pdf --category service
+python ingest_document.py faq.md --title "FAQ" --category business_info
+```
+
+- `--title` defaults to the file name and is the source label shown in reply
+  `sources`. Re-ingesting the same title is blocked unless you pass `--replace`.
+- `--no-embed` inserts rows only (run `index_knowledge.py` later).
+- PDF support needs `pypdf` (already in `requirements.txt`).
+
 ## Endpoints
 
 - `GET /health` — liveness.
