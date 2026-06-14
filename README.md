@@ -394,6 +394,30 @@ Scan the QR code with WhatsApp on your phone to link the device.
 - Health checks ensure the service is running correctly
 - If AWS credentials are not set, you'll see warnings (they're optional)
 
+**Running with the AI sidecar (optional):**
+
+`docker-compose.yml` also defines the `ai-agent` service (the AI reply-suggestion
+sidecar, exposed on port `8090`). `docker-compose up -d` starts both services; the
+sidecar reads these from your `.env`:
+
+```bash
+DATABASE_URL=postgresql://user:password@host:5432/dbname
+OPENROUTER_API_KEY=your_openrouter_api_key   # chat LLM
+GOOGLE_API_KEY=your_google_ai_studio_api_key # embeddings (Gemini)
+
+# Enable the Go -> sidecar integration:
+ENABLE_AI_RESPONSE=true
+AI_SERVICE_URL=http://ai-agent:8090          # service name on the compose network
+```
+
+Apply the pgvector schema and index your knowledge once before using it (see the
+[AI Reply Suggestion](#-ai-reply-suggestion-optional) section). To run **only** the
+API without the sidecar, start a single service:
+
+```bash
+docker-compose up -d whatspoints
+```
+
 #### Manual Docker Commands
 
 **Build Docker Image:**
