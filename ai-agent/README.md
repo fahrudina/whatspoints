@@ -48,6 +48,20 @@ Apply the pgvector schema once (from repo root):
 psql "$DATABASE_URL" -f database/vector_schema.sql
 ```
 
+> **Supabase on an IPv4 network:** use the **connection pooler** host, not the
+> direct `db.<ref>.supabase.co` host. The direct host is IPv6-only, so on
+> IPv4-only machines psycopg fails with `connection is bad: no error details
+> available`. Use the pooler instead (session mode, port 5432):
+>
+> ```
+> postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require
+> ```
+>
+> Copy it from Dashboard → Project Settings → Database → Connection pooler →
+> Session. (Transaction mode on port 6543 also works, but with psycopg3 you must
+> disable prepared statements via `prepare_threshold=None`; session mode avoids
+> that.)
+
 ## Run
 
 ```bash
