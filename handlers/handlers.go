@@ -81,7 +81,8 @@ func HandleMessageEvent(v *events.Message, db *sql.DB, client *whatsmeow.Client)
 // message is laundry-related (ShouldReply). No-op when AI auto-send is disabled.
 func handleAIReply(evt *events.Message, client *whatsmeow.Client, msgText string) {
 	ai := getAIClient()
-	if ai == nil || strings.TrimSpace(msgText) == "" {
+	// IsFromMe guard: never let the bot reply to its own outgoing messages.
+	if ai == nil || evt.Info.IsFromMe || strings.TrimSpace(msgText) == "" {
 		return
 	}
 
