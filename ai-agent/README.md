@@ -53,7 +53,7 @@ psql "$DATABASE_URL" -f database/vector_schema.sql
 > IPv4-only machines psycopg fails with `connection is bad: no error details
 > available`. Use the pooler instead (session mode, port 5432):
 >
-> ```
+> ```text
 > postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require
 > ```
 >

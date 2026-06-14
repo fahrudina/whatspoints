@@ -21,13 +21,13 @@ func TestAIClient_GenerateReply_Success(t *testing.T) {
 		assert.Equal(t, "promo masih ada?", body["customer_message"])
 		assert.Equal(t, "628123", body["phone_number"])
 
-		json.NewEncoder(w).Encode(domain.AIReplyResponse{
+		assert.NoError(t, json.NewEncoder(w).Encode(domain.AIReplyResponse{
 			Reply:  "Masih kak",
 			Intent: "ask_promo",
 			Sources: []domain.AISource{
 				{ID: 1, Title: "Promo", Content: "isi", Category: "promo", Score: 0.12},
 			},
-		})
+		}))
 	}))
 	defer server.Close()
 

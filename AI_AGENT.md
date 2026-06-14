@@ -29,7 +29,7 @@ faster.
 
 ## 3. Architecture
 
-```
+```text
                          Basic Auth
    Client ──HTTP──▶  Go WhatsApp API (Gin)  ──HTTP──▶  Python AI sidecar (FastAPI)
                      POST /api/ai/reply               POST /ai/reply
@@ -72,12 +72,13 @@ faster.
 
 ## 5. Request flow — `POST /api/ai/reply`
 
-```
-Client → Go AIHandler
+```text
+Client → Go AIHandler   (inbound body: {message, phone_number})
   ├─ AI disabled?              → 503 {"success":false,"message":"AI response feature is disabled"}
   ├─ empty "message"?          → 400 {"success":false,"message":"message is required"}
   └─ enabled →
-       AIService → AIClient → POST {AI_SERVICE_URL}/ai/reply {customer_message, phone_number}
+       AIService → AIClient → POST {AI_SERVICE_URL}/ai/reply  {customer_message, phone_number}
+                              (the client maps the inbound "message" → "customer_message")
                                     └─ sidecar runs the RAG graph
        ← 200 {reply, intent, should_reply, sources[]}
 ```
@@ -87,7 +88,7 @@ The route is **always registered**, even when disabled, so clients get a clear
 
 ## 6. RAG workflow (LangGraph)
 
-```
+```text
 START → detect_intent → route_after_intent
           ├─ skip   (intent = unknown / non-laundry)  ─────────────▶ END   should_reply=false, reply=""
           └─ retrieve_context → route_after_retrieval
@@ -126,7 +127,7 @@ inserts, and can be built up front.
 
 ## 8. Knowledge lifecycle
 
-```
+```text
 add knowledge ──▶ embedding = NULL ──▶ embed ──▶ searchable (no restart)
 ```
 

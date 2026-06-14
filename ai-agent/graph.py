@@ -8,6 +8,7 @@
 Answers are Bahasa Indonesia, casual/polite WhatsApp-admin tone, and grounded
 only in retrieved context (no hallucinated promo/price/branch/order data).
 """
+import logging
 import os
 from typing import TypedDict
 
@@ -15,6 +16,8 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 
 from embedding import search_knowledge
+
+logger = logging.getLogger(__name__)
 
 # Chat LLM runs through OpenRouter (OpenAI-compatible). Override base/key/model
 # via env. Model names are OpenRouter-style, e.g. "openai/gpt-4o-mini".
@@ -151,13 +154,21 @@ _graph = None
 
 
 def generate_reply(customer_message: str, phone_number: str = "") -> dict:
-    """Run the workflow and return {reply, intent, sources}."""
+    """Run the workflow and return {reply, intent, should_reply, sources}.
+
+    Fail closed: on any LLM/DB error this returns a no-reply payload rather than
+    raising, since the feature only produces optional suggestions.
+    """
     global _graph
     if _graph is None:
         _graph = build_graph()
-    result = _graph.invoke(
-        {"customer_message": customer_message, "phone_number": phone_number}
-    )
+    try:
+        result = _graph.invoke(
+            {"customer_message": customer_message, "phone_number": phone_number}
+        )
+    except Exception:
+        logger.exception("AI graph failed; returning no-reply")
+        return {"reply": "", "intent": "unknown", "should_reply": False, "sources": []}
     return {
         "reply": result.get("answer", FALLBACK_REPLY),
         "intent": result.get("intent", "unknown"),

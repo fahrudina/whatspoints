@@ -55,7 +55,12 @@ def search_knowledge(query: str, top_k: int = TOP_K) -> list[dict]:
         ORDER BY embedding <=> %s::vector
         LIMIT %s
     """
-    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+    # Request-path query: fail fast instead of hanging on DB/network stalls.
+    with psycopg.connect(
+        os.environ["DATABASE_URL"],
+        connect_timeout=5,
+        options="-c statement_timeout=5000",
+    ) as conn:
         rows = conn.execute(sql, (embedding, embedding, top_k)).fetchall()
 
     return [

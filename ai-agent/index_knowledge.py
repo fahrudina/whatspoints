@@ -32,7 +32,8 @@ def main() -> None:
                 "WHERE id = %s",
                 (vector, row_id),
             )
-        conn.commit()
+            # Commit per row so a late failure keeps earlier progress.
+            conn.commit()
 
     print("Embedding indexing completed")
 
