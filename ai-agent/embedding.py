@@ -6,31 +6,33 @@ without restarting the service.
 import os
 
 import psycopg
-from langchain_openai import OpenAIEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-EMBED_MODEL = "text-embedding-3-small"  # 1536 dims, matches VECTOR(1536)
+# Embeddings run on Google AI Studio (Gemini). gemini-embedding-001 defaults to
+# 3072 dims; we request 1536 so vectors match the VECTOR(1536) schema. Keep
+# EMBED_DIM in sync with the schema if you change the model.
+EMBED_MODEL = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-001")
+EMBED_DIM = int(os.getenv("EMBEDDING_DIM", "1536"))
 TOP_K = 3
 
 _embeddings = None
 
 
-def _client() -> OpenAIEmbeddings:
-    # Lazy init so importing this module doesn't require an API key.
-    # Embeddings use real OpenAI (OpenRouter has no embeddings endpoint); keep
-    # this key separate from the OpenRouter chat key. EMBEDDINGS_BASE_URL lets you
-    # point at another OpenAI-compatible embeddings provider if needed.
+def _client() -> GoogleGenerativeAIEmbeddings:
+    # Lazy init so importing this module (e.g. for /health) needs no API key.
     global _embeddings
     if _embeddings is None:
-        _embeddings = OpenAIEmbeddings(
+        _embeddings = GoogleGenerativeAIEmbeddings(
             model=EMBED_MODEL,
-            base_url=os.getenv("EMBEDDINGS_BASE_URL") or None,
-            api_key=os.getenv("EMBEDDINGS_API_KEY") or os.getenv("OPENAI_API_KEY"),
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
         )
     return _embeddings
 
 
 def embed_text(text: str) -> list[float]:
-    return _client().embed_query(text)
+    # Cosine distance (pgvector <=>) is scale-invariant, so the un-normalized
+    # output Gemini returns below 3072 dims is fine here.
+    return _client().embed_query(text, output_dimensionality=EMBED_DIM)
 
 
 def vector_to_pgvector(vector: list[float]) -> str:

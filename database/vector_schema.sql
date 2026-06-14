@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS knowledge_base (
     title TEXT,
     content TEXT NOT NULL,
     category TEXT,
-    embedding VECTOR(1536), -- OpenAI text-embedding-3-small
+    embedding VECTOR(1536), -- Google gemini-embedding-001 (output_dimensionality=1536)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -575,9 +575,9 @@ knowledge base. It is **disabled by default** and **never auto-sends** anything 
 this phase only produces suggestions. Manual `/api/send-message` is completely
 unaffected by the AI toggle.
 
-Architecture: Go API → HTTP → Python sidecar (FastAPI + LangGraph) → OpenAI
+Architecture: Go API → HTTP → Python sidecar (FastAPI + LangGraph) → Gemini
 embeddings + Postgres/pgvector. Chat LLM runs through OpenRouter; embeddings run
-through OpenAI (OpenRouter has no embeddings endpoint).
+through Google AI Studio (`gemini-embedding-001`).
 
 ### 1. Apply the pgvector schema
 
@@ -598,7 +598,7 @@ VALUES ('Promo Laundry', 'Promo Cuci 8KG Rp10.000 berlaku Senin sampai Rabu.', '
 ```bash
 cd ai-agent
 pip install -r requirements.txt
-cp .env.example .env   # set DATABASE_URL, OPENROUTER_API_KEY, OPENAI_API_KEY
+cp .env.example .env   # set DATABASE_URL, OPENROUTER_API_KEY, GOOGLE_API_KEY
 python index_knowledge.py
 ```
 

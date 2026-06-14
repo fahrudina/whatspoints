@@ -6,7 +6,7 @@ auto-send anything — the Go service calls it over HTTP and returns the suggest
 
 ## Stack
 
-FastAPI · LangGraph · OpenAI embeddings (`text-embedding-3-small`) · PostgreSQL + pgvector
+FastAPI · LangGraph · Google Gemini embeddings (`gemini-embedding-001`) · PostgreSQL + pgvector
 
 ## Setup
 
@@ -14,25 +14,31 @@ FastAPI · LangGraph · OpenAI embeddings (`text-embedding-3-small`) · PostgreS
 cd ai-agent
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # then fill DATABASE_URL and OPENAI_API_KEY
+cp .env.example .env   # then fill DATABASE_URL, OPENROUTER_API_KEY, GOOGLE_API_KEY
 ```
 
 Environment variables:
 
-| Var                  | Default                         | Purpose                                         |
-|----------------------|---------------------------------|-------------------------------------------------|
-| `DATABASE_URL`       | —                               | Postgres connection string                      |
-| `OPENROUTER_API_KEY` | —                               | OpenRouter key for the chat LLM                 |
-| `LLM_BASE_URL`       | `https://openrouter.ai/api/v1`  | Chat LLM base URL (OpenAI-compatible)           |
-| `AI_MODEL`           | `openai/gpt-4o-mini`            | Chat model (OpenRouter-style name)              |
-| `OPENAI_API_KEY`     | —                               | **OpenAI** key for embeddings (see note)        |
-| `AI_HOST`            | `0.0.0.0`                       | Bind host                                       |
-| `AI_PORT`            | `8090`                          | Bind port                                       |
+| Var                  | Default                          | Purpose                                         |
+|----------------------|----------------------------------|-------------------------------------------------|
+| `DATABASE_URL`       | —                                | Postgres connection string                      |
+| `OPENROUTER_API_KEY` | —                                | OpenRouter key for the chat LLM                 |
+| `LLM_BASE_URL`       | `https://openrouter.ai/api/v1`   | Chat LLM base URL (OpenAI-compatible)           |
+| `AI_MODEL`           | `openai/gpt-4o-mini`             | Chat model (OpenRouter-style name)              |
+| `GOOGLE_API_KEY`     | —                                | Google AI Studio key for embeddings             |
+| `EMBEDDING_MODEL`    | `models/gemini-embedding-001`    | Gemini embedding model                          |
+| `EMBEDDING_DIM`      | `1536`                           | Output dims; must match `VECTOR(...)` in schema |
+| `AI_HOST`            | `0.0.0.0`                        | Bind host                                       |
+| `AI_PORT`            | `8090`                           | Bind port                                       |
 
-> **Embeddings note:** OpenRouter has no embeddings endpoint, so
-> `text-embedding-3-small` runs through real OpenAI (`OPENAI_API_KEY`). To use a
-> different OpenAI-compatible embeddings provider, set `EMBEDDINGS_BASE_URL` and
-> `EMBEDDINGS_API_KEY`. The chat LLM and embeddings keys are independent.
+> **Embeddings note:** the chat LLM runs through OpenRouter, but embeddings run on
+> **Google AI Studio** (`gemini-embedding-001`). It defaults to 3072 dims; we
+> request `EMBEDDING_DIM=1536` to match the `VECTOR(1536)` schema. If you change
+> the model or dims, update `database/vector_schema.sql` and re-index. The chat and
+> embedding providers/keys are independent.
+>
+> **Switching embedding providers invalidates existing vectors.** Reset and
+> re-index: `UPDATE knowledge_base SET embedding = NULL;` then `python index_knowledge.py`.
 
 ## Database
 
