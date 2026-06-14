@@ -599,6 +599,8 @@ knowledge base. It is **disabled by default** and **never auto-sends** anything 
 this phase only produces suggestions. Manual `/api/send-message` is completely
 unaffected by the AI toggle.
 
+> For the architecture and design overview, see [`AI_AGENT.md`](AI_AGENT.md).
+
 Architecture: Go API → HTTP → Python sidecar (FastAPI + LangGraph) → Gemini
 embeddings + Postgres/pgvector. Chat LLM runs through OpenRouter; embeddings run
 through Google AI Studio (`gemini-embedding-001`).
