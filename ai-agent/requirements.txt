@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+psycopg[binary]
+langgraph
+langchain
+langchain-openai
+langchain-google-genai
+pypdf
+python-dotenv
+pydantic

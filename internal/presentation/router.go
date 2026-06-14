@@ -10,24 +10,27 @@ import (
 )
 
 type Router struct {
-	messageHandler             *MessageHandler
-	senderRegistrationHandler  *SenderRegistrationHandler
-	authService                domain.AuthService
+	messageHandler            *MessageHandler
+	senderRegistrationHandler *SenderRegistrationHandler
+	aiHandler                 *AIHandler
+	authService               domain.AuthService
 }
 
 // NewRouter creates a new router
-func NewRouter(messageHandler *MessageHandler, authService domain.AuthService) *Router {
+func NewRouter(messageHandler *MessageHandler, aiHandler *AIHandler, authService domain.AuthService) *Router {
 	return &Router{
 		messageHandler: messageHandler,
+		aiHandler:      aiHandler,
 		authService:    authService,
 	}
 }
 
 // NewRouterWithRegistration creates a new router with sender registration support
-func NewRouterWithRegistration(messageHandler *MessageHandler, senderRegistrationHandler *SenderRegistrationHandler, authService domain.AuthService) *Router {
+func NewRouterWithRegistration(messageHandler *MessageHandler, senderRegistrationHandler *SenderRegistrationHandler, aiHandler *AIHandler, authService domain.AuthService) *Router {
 	return &Router{
 		messageHandler:            messageHandler,
 		senderRegistrationHandler: senderRegistrationHandler,
+		aiHandler:                 aiHandler,
 		authService:               authService,
 	}
 }
@@ -68,6 +71,11 @@ func (r *Router) SetupRoutes() *gin.Engine {
 		apiRoutes.GET("/status", r.messageHandler.GetStatus)
 		apiRoutes.GET("/senders", r.messageHandler.ListSenders)
 
+		// AI reply suggestion (always registered; returns 503 when disabled)
+		if r.aiHandler != nil {
+			apiRoutes.POST("/ai/reply", r.aiHandler.GenerateAIReply)
+		}
+
 		// Sender registration endpoints (if handler is available)
 		if r.senderRegistrationHandler != nil {
 			apiRoutes.POST("/register-sender-qr", r.senderRegistrationHandler.StartQRRegistration)
@@ -97,10 +105,10 @@ func (r *Router) findWebDirectory() string {
 
 	// Possible locations for web directory
 	possiblePaths := []string{
-		"./web",                              // Relative to current directory
-		filepath.Join(cwd, "web"),            // Absolute path from cwd
-		"/app/web",                           // Common Docker/deployment path
-		filepath.Join(cwd, "..", "web"),      // One level up
+		"./web",                         // Relative to current directory
+		filepath.Join(cwd, "web"),       // Absolute path from cwd
+		"/app/web",                      // Common Docker/deployment path
+		filepath.Join(cwd, "..", "web"), // One level up
 	}
 
 	// Check each possible path

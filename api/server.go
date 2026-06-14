@@ -6,12 +6,27 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/wa-serv/config"
 	"github.com/wa-serv/internal/application"
+	"github.com/wa-serv/internal/domain"
 	"github.com/wa-serv/internal/infrastructure"
 	"github.com/wa-serv/internal/presentation"
 	"github.com/wa-serv/whatsapp"
 	"go.mau.fi/whatsmeow"
 )
+
+// buildAIHandler wires the optional AI reply-suggestion feature from environment
+// config. The handler is always returned (so the route exists and returns 503
+// when disabled); the client/service are only active when AI is enabled.
+func buildAIHandler() *presentation.AIHandler {
+	aiCfg := config.LoadAIConfig()
+	var aiClient domain.AIClient
+	if aiCfg.Enabled {
+		aiClient = infrastructure.NewAIClient(aiCfg.ServiceURL)
+	}
+	aiService := application.NewAIService(aiClient, aiCfg)
+	return presentation.NewAIHandler(aiService, aiCfg)
+}
 
 // APIServer represents the API server using clean architecture
 type APIServer struct {
@@ -30,7 +45,7 @@ func NewAPIServer(db *sql.DB, client *whatsmeow.Client, username, password strin
 
 	// Presentation layer
 	messageHandler := presentation.NewMessageHandler(messageService, authService)
-	router := presentation.NewRouter(messageHandler, authService)
+	router := presentation.NewRouter(messageHandler, buildAIHandler(), authService)
 
 	// Setup routes
 	ginRouter := router.SetupRoutes()
@@ -63,7 +78,7 @@ func NewAPIServerWithClientManager(db *sql.DB, clientManager *whatsapp.ClientMan
 	// Presentation layer
 	messageHandler := presentation.NewMessageHandler(messageService, authService)
 	registrationHandler := presentation.NewSenderRegistrationHandler(registrationService, authService)
-	router := presentation.NewRouterWithRegistration(messageHandler, registrationHandler, authService)
+	router := presentation.NewRouterWithRegistration(messageHandler, registrationHandler, buildAIHandler(), authService)
 
 	// Setup routes
 	ginRouter := router.SetupRoutes()

@@ -13,7 +13,19 @@ var (
 	ErrUnauthorized         = errors.New("unauthorized access")
 	ErrSenderNotFound       = errors.New("sender not found")
 	ErrNoActiveSender       = errors.New("no active sender available")
+	ErrAIResponseDisabled   = errors.New("AI response feature is disabled")
+	ErrEmptyMessage         = errors.New("message is required")
 )
+
+// AIClient talks to the external AI sidecar service over HTTP.
+type AIClient interface {
+	GenerateReply(ctx context.Context, message, phoneNumber string) (*AIReplyResponse, error)
+}
+
+// AIService is the business logic for generating suggested AI replies.
+type AIService interface {
+	GenerateReply(ctx context.Context, req *AIReplyRequest) (*AIReplyResponse, error)
+}
 
 // WhatsAppRepository defines the interface for WhatsApp operations
 type WhatsAppRepository interface {

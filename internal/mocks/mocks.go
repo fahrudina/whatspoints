@@ -102,3 +102,29 @@ func (m *MockAuthService) ValidateCredentials(username, password string) bool {
 	args := m.Called(username, password)
 	return args.Bool(0)
 }
+
+// MockAIClient is a mock implementation of domain.AIClient
+type MockAIClient struct {
+	mock.Mock
+}
+
+func (m *MockAIClient) GenerateReply(ctx context.Context, message, phoneNumber string) (*domain.AIReplyResponse, error) {
+	args := m.Called(ctx, message, phoneNumber)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.AIReplyResponse), args.Error(1)
+}
+
+// MockAIService is a mock implementation of domain.AIService
+type MockAIService struct {
+	mock.Mock
+}
+
+func (m *MockAIService) GenerateReply(ctx context.Context, req *domain.AIReplyRequest) (*domain.AIReplyResponse, error) {
+	args := m.Called(ctx, req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.AIReplyResponse), args.Error(1)
+}

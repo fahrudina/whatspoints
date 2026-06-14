@@ -24,6 +24,7 @@ A modern, production-ready WhatsApp messaging service built with Go, featuring c
 - `POST /api/send-message` - Send WhatsApp messages via REST API
 - `GET /api/status` - Check WhatsApp connection and service status
 - `GET /api/senders` - List all available WhatsApp sender accounts
+- `POST /api/ai/reply` - Generate a suggested AI reply (optional; see [AI Reply Suggestion](#-ai-reply-suggestion-optional))
 - `GET /health` - Health check endpoint for monitoring
 
 ## 📋 Prerequisites
@@ -393,6 +394,30 @@ Scan the QR code with WhatsApp on your phone to link the device.
 - Health checks ensure the service is running correctly
 - If AWS credentials are not set, you'll see warnings (they're optional)
 
+**Running with the AI sidecar (optional):**
+
+`docker-compose.yml` also defines the `ai-agent` service (the AI reply-suggestion
+sidecar, exposed on port `8090`). `docker-compose up -d` starts both services; the
+sidecar reads these from your `.env`:
+
+```bash
+DATABASE_URL=postgresql://user:password@host:5432/dbname
+OPENROUTER_API_KEY=your_openrouter_api_key   # chat LLM
+GOOGLE_API_KEY=your_google_ai_studio_api_key # embeddings (Gemini)
+
+# Enable the Go -> sidecar integration:
+ENABLE_AI_RESPONSE=true
+AI_SERVICE_URL=http://ai-agent:8090          # service name on the compose network
+```
+
+Apply the pgvector schema and index your knowledge once before using it (see the
+[AI Reply Suggestion](#-ai-reply-suggestion-optional) section). To run **only** the
+API without the sidecar, start a single service:
+
+```bash
+docker-compose up -d whatspoints
+```
+
 #### Manual Docker Commands
 
 **Build Docker Image:**
@@ -565,6 +590,119 @@ We welcome contributions! Please follow these steps:
 - Write comprehensive unit tests
 - Update documentation for new features
 - Use meaningful commit messages
+
+## 🤖 AI Reply Suggestion (Optional)
+
+An optional RAG assistant (Python sidecar under [`ai-agent/`](ai-agent/README.md))
+generates **suggested** WhatsApp replies in Bahasa Indonesia from a pgvector
+knowledge base. It is **disabled by default** and **never auto-sends** anything —
+this phase only produces suggestions. Manual `/api/send-message` is completely
+unaffected by the AI toggle.
+
+> For the architecture and design overview, see [`AI_AGENT.md`](AI_AGENT.md).
+
+Architecture: Go API → HTTP → Python sidecar (FastAPI + LangGraph) → Gemini
+embeddings + Postgres/pgvector. Chat LLM runs through OpenRouter; embeddings run
+through Google AI Studio (`gemini-embedding-001`).
+
+### 1. Apply the pgvector schema
+
+```bash
+psql "$DATABASE_URL" -f database/vector_schema.sql
+# On Supabase you can paste database/vector_schema.sql into the SQL editor.
+```
+
+This enables the `vector` extension and creates `knowledge_base` with a
+`VECTOR(1536)` column and an **HNSW** cosine index. HNSW (rather than IVFFlat) is
+used because it needs no training data, handles incremental inserts, and can be
+created up front — so you don't have to rebuild the index after adding rows.
+
+### 2. Insert knowledge
+
+```sql
+INSERT INTO knowledge_base (title, content, category)
+VALUES ('Promo Laundry', 'Promo Cuci 8KG Rp10.000 berlaku Senin sampai Rabu.', 'promo');
+```
+
+### 3. Generate embeddings (indexer)
+
+```bash
+cd ai-agent
+pip install -r requirements.txt
+cp .env.example .env   # set DATABASE_URL, OPENROUTER_API_KEY, GOOGLE_API_KEY
+python index_knowledge.py
+```
+
+Only rows with `embedding IS NULL` are processed, so it is safe to rerun.
+**No service restart is needed** after inserting + indexing new data — retrieval
+queries pgvector on every request.
+
+### 4. Start the AI sidecar
+
+```bash
+cd ai-agent
+uvicorn app:api --host 0.0.0.0 --port 8090
+# health: curl http://localhost:8090/health
+```
+
+### 5. Enable AI on the Go service
+
+```env
+ENABLE_AI_RESPONSE=true
+ENABLE_AI_AUTO_SEND=false          # reserved; auto-send is NOT implemented yet
+AI_SERVICE_URL=http://localhost:8090
+```
+
+`ENABLE_AI_RESPONSE` accepts `true`, `1`, `yes`, or `on`. Anything else (or a
+missing value) keeps the feature **disabled**. `AI_SERVICE_URL` is only read when
+enabled and defaults to `http://localhost:8090`.
+
+### 6. Disable AI
+
+```env
+ENABLE_AI_RESPONSE=false
+```
+
+When disabled, `POST /api/ai/reply` stays registered but returns **HTTP 503**:
+
+```json
+{ "success": false, "message": "AI response feature is disabled" }
+```
+
+`/api/send-message`, `/api/status`, `/api/senders`, and `/health` keep working
+normally — the AI toggle only controls AI-generated reply suggestions and does
+not affect manual WhatsApp sending.
+
+### 7. Call the endpoint
+
+```bash
+curl -X POST http://localhost:8080/api/ai/reply \
+  -u admin:your_password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Kak promo cuci kiloan masih ada?",
+    "phone_number": "628123456789"
+  }'
+```
+
+Enabled response:
+
+```json
+{
+  "reply": "Masih kak 😊 Promo Cuci 8KG Rp10.000 berlaku Senin sampai Rabu ya.",
+  "intent": "ask_promo",
+  "sources": [
+    { "id": 1, "title": "Promo Laundry", "content": "Promo Cuci 8KG Rp10.000 berlaku Senin sampai Rabu.", "category": "promo", "score": 0.12 }
+  ]
+}
+```
+
+An empty `message` returns **HTTP 400** `{ "success": false, "message": "message is required" }`.
+
+> **Note:** `ENABLE_AI_AUTO_SEND` is a reserved toggle for a future phase.
+> Auto-send is not implemented — the endpoint only returns suggestions.
+
+See [`ai-agent/README.md`](ai-agent/README.md) for full sidecar configuration and Docker usage.
 
 ## 📄 License
 
