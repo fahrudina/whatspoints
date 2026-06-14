@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/wa-serv/config"
+	"github.com/wa-serv/internal/infrastructure"
 	"github.com/wa-serv/processor"
 	"github.com/wa-serv/s3uploader"
 	"go.mau.fi/whatsmeow"
@@ -15,6 +18,22 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
 )
+
+// AI sidecar client, built once from env. nil when AI auto-send is disabled.
+var (
+	aiOnce   sync.Once
+	aiClient *infrastructure.AIClient
+)
+
+func getAIClient() *infrastructure.AIClient {
+	aiOnce.Do(func() {
+		cfg := config.LoadAIConfig()
+		if cfg.Enabled && cfg.AutoSend {
+			aiClient = infrastructure.NewAIClient(cfg.ServiceURL)
+		}
+	})
+	return aiClient
+}
 
 func HandleMessageEvent(v *events.Message, db *sql.DB, client *whatsmeow.Client) {
 	var msgText string
@@ -51,7 +70,36 @@ func HandleMessageEvent(v *events.Message, db *sql.DB, client *whatsmeow.Client)
 			replyToMessage(v, client)
 		} else if msgText == "help" {
 			sendHelpMessage(v, client)
+		} else {
+			// ponytail: goroutine so the 15s AI call never blocks the whatsmeow read loop.
+			go handleAIReply(v, client, msgText)
 		}
+	}
+}
+
+// handleAIReply asks the AI sidecar for a suggested reply and sends it when the
+// message is laundry-related (ShouldReply). No-op when AI auto-send is disabled.
+func handleAIReply(evt *events.Message, client *whatsmeow.Client, msgText string) {
+	ai := getAIClient()
+	if ai == nil || strings.TrimSpace(msgText) == "" {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	resp, err := ai.GenerateReply(ctx, msgText, evt.Info.Sender.String())
+	if err != nil {
+		fmt.Printf("AI reply error: %v\n", err)
+		return
+	}
+	if !resp.ShouldReply || strings.TrimSpace(resp.Reply) == "" {
+		return // not laundry-related — skip, don't reply
+	}
+
+	msg := &waProto.Message{Conversation: proto.String(resp.Reply)}
+	if _, err := client.SendMessage(context.Background(), evt.Info.Sender, msg); err != nil {
+		fmt.Printf("Failed to send AI reply: %v\n", err)
 	}
 }
 
