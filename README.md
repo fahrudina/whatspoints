@@ -24,6 +24,7 @@ A modern, production-ready WhatsApp messaging service built with Go, featuring c
 - `POST /api/send-message` - Send WhatsApp messages via REST API
 - `GET /api/status` - Check WhatsApp connection and service status
 - `GET /api/senders` - List all available WhatsApp sender accounts
+- `POST /api/ai/reply` - Generate a suggested AI reply (optional; see [AI Reply Suggestion](#-ai-reply-suggestion-optional))
 - `GET /health` - Health check endpoint for monitoring
 
 ## 📋 Prerequisites
@@ -565,6 +566,112 @@ We welcome contributions! Please follow these steps:
 - Write comprehensive unit tests
 - Update documentation for new features
 - Use meaningful commit messages
+
+## 🤖 AI Reply Suggestion (Optional)
+
+An optional RAG assistant (Python sidecar under [`ai-agent/`](ai-agent/README.md))
+generates **suggested** WhatsApp replies in Bahasa Indonesia from a pgvector
+knowledge base. It is **disabled by default** and **never auto-sends** anything —
+this phase only produces suggestions. Manual `/api/send-message` is completely
+unaffected by the AI toggle.
+
+Architecture: Go API → HTTP → Python sidecar (FastAPI + LangGraph) → OpenAI
+embeddings + Postgres/pgvector. Chat LLM runs through OpenRouter; embeddings run
+through OpenAI (OpenRouter has no embeddings endpoint).
+
+### 1. Apply the pgvector schema
+
+```bash
+psql "$DATABASE_URL" -f database/vector_schema.sql
+# On Supabase you can paste database/vector_schema.sql into the SQL editor.
+```
+
+### 2. Insert knowledge
+
+```sql
+INSERT INTO knowledge_base (title, content, category)
+VALUES ('Promo Laundry', 'Promo Cuci 8KG Rp10.000 berlaku Senin sampai Rabu.', 'promo');
+```
+
+### 3. Generate embeddings (indexer)
+
+```bash
+cd ai-agent
+pip install -r requirements.txt
+cp .env.example .env   # set DATABASE_URL, OPENROUTER_API_KEY, OPENAI_API_KEY
+python index_knowledge.py
+```
+
+Only rows with `embedding IS NULL` are processed, so it is safe to rerun.
+**No service restart is needed** after inserting + indexing new data — retrieval
+queries pgvector on every request.
+
+### 4. Start the AI sidecar
+
+```bash
+cd ai-agent
+uvicorn app:api --host 0.0.0.0 --port 8090
+# health: curl http://localhost:8090/health
+```
+
+### 5. Enable AI on the Go service
+
+```env
+ENABLE_AI_RESPONSE=true
+ENABLE_AI_AUTO_SEND=false          # reserved; auto-send is NOT implemented yet
+AI_SERVICE_URL=http://localhost:8090
+```
+
+`ENABLE_AI_RESPONSE` accepts `true`, `1`, `yes`, or `on`. Anything else (or a
+missing value) keeps the feature **disabled**. `AI_SERVICE_URL` is only read when
+enabled and defaults to `http://localhost:8090`.
+
+### 6. Disable AI
+
+```env
+ENABLE_AI_RESPONSE=false
+```
+
+When disabled, `POST /api/ai/reply` stays registered but returns **HTTP 503**:
+
+```json
+{ "success": false, "message": "AI response feature is disabled" }
+```
+
+`/api/send-message`, `/api/status`, `/api/senders`, and `/health` keep working
+normally — the AI toggle only controls AI-generated reply suggestions and does
+not affect manual WhatsApp sending.
+
+### 7. Call the endpoint
+
+```bash
+curl -X POST http://localhost:8080/api/ai/reply \
+  -u admin:your_password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Kak promo cuci kiloan masih ada?",
+    "phone_number": "628123456789"
+  }'
+```
+
+Enabled response:
+
+```json
+{
+  "reply": "Masih kak 😊 Promo Cuci 8KG Rp10.000 berlaku Senin sampai Rabu ya.",
+  "intent": "ask_promo",
+  "sources": [
+    { "id": 1, "title": "Promo Laundry", "content": "Promo Cuci 8KG Rp10.000 berlaku Senin sampai Rabu.", "category": "promo", "score": 0.12 }
+  ]
+}
+```
+
+An empty `message` returns **HTTP 400** `{ "success": false, "message": "message is required" }`.
+
+> **Note:** `ENABLE_AI_AUTO_SEND` is a reserved toggle for a future phase.
+> Auto-send is not implemented — the endpoint only returns suggestions.
+
+See [`ai-agent/README.md`](ai-agent/README.md) for full sidecar configuration and Docker usage.
 
 ## 📄 License
 

@@ -30,6 +30,11 @@ services:
       
       # WhatsApp Configuration
       ALLOWED_PHONE_NUMBERS: ${ALLOWED_PHONE_NUMBERS}
+
+      # AI reply suggestion (optional; disabled by default)
+      ENABLE_AI_RESPONSE: ${ENABLE_AI_RESPONSE:-false}
+      ENABLE_AI_AUTO_SEND: ${ENABLE_AI_AUTO_SEND:-false}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-agent:8090}
     volumes:
       # Persist WhatsApp session data
       - whatsapp_data:/app/data
@@ -40,6 +45,29 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  ai-agent:
+    build:
+      context: ./ai-agent
+      dockerfile: Dockerfile
+    container_name: whatspoints-ai-agent
+    ports:
+      - "${AI_PORT:-8090}:8090"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      # Chat LLM via OpenRouter
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://openrouter.ai/api/v1}
+      AI_MODEL: ${AI_MODEL:-openai/gpt-4o-mini}
+      # Embeddings via OpenAI (OpenRouter has no embeddings endpoint)
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8090/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
 volumes:
   whatsapp_data:

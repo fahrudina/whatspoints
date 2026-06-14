@@ -70,6 +70,28 @@ type RegisterSenderCodeResponse struct {
 	Message     string `json:"message,omitempty"`      // Status or error message
 }
 
+// AIReplyRequest is the request to generate a suggested AI reply.
+type AIReplyRequest struct {
+	Message     string `json:"message" validate:"required"`
+	PhoneNumber string `json:"phone_number,omitempty"`
+}
+
+// AIReplyResponse is a suggested reply produced by the AI sidecar.
+type AIReplyResponse struct {
+	Reply   string     `json:"reply"`
+	Intent  string     `json:"intent"`
+	Sources []AISource `json:"sources,omitempty"`
+}
+
+// AISource is a knowledge-base document the AI used to ground its reply.
+type AISource struct {
+	ID       int64   `json:"id"`
+	Title    string  `json:"title"`
+	Content  string  `json:"content"`
+	Category string  `json:"category,omitempty"`
+	Score    float64 `json:"score"`
+}
+
 // RegistrationStatusResponse represents the status of a registration session
 type RegistrationStatusResponse struct {
 	Success  bool   `json:"success"`

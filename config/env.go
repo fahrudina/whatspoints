@@ -54,6 +54,39 @@ func LoadEnv() {
 	}
 }
 
+// AIConfig holds configuration for the optional AI reply-suggestion feature.
+type AIConfig struct {
+	Enabled    bool
+	AutoSend   bool // reserved for future use; auto-send is not implemented
+	ServiceURL string
+}
+
+// LoadAIConfig reads AI feature configuration from the environment.
+//
+// ENABLE_AI_RESPONSE / ENABLE_AI_AUTO_SEND accept true/1/yes/on (default false).
+// AI_SERVICE_URL defaults to http://localhost:8090 only when AI is enabled; when
+// disabled it is left empty so a missing value never blocks startup.
+func LoadAIConfig() AIConfig {
+	cfg := AIConfig{
+		Enabled:  parseBoolEnv("ENABLE_AI_RESPONSE"),
+		AutoSend: parseBoolEnv("ENABLE_AI_AUTO_SEND"),
+	}
+	if cfg.Enabled {
+		cfg.ServiceURL = getEnv("AI_SERVICE_URL", "http://localhost:8090")
+	}
+	return cfg
+}
+
+// parseBoolEnv treats true/1/yes/on (case-insensitive) as true; anything else false.
+func parseBoolEnv(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "true", "1", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 // getEnv retrieves the value of the environment variable or returns a default value if not set
 func getEnv(key, defaultValue string) string {
 	value := os.Getenv(key)
