@@ -24,36 +24,55 @@ logger = logging.getLogger(__name__)
 CHAT_MODEL = os.getenv("AI_MODEL", "openai/gpt-4o-mini")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1")
 
-INTENTS = {
-    "ask_promo",
+# Match order matters: check specific labels before "unknown" when parsing the
+# model's (possibly messy) output. A list, not a set, so iteration is stable.
+INTENT_LABELS = [
+    "ask_order_status",
     "ask_opening_hours",
+    "ask_promo",
     "ask_service",
     "complaint",
-    "ask_order_status",
     "unknown",
-}
+]
+INTENTS = set(INTENT_LABELS)
 
 # Only laundry-related intents get a reply. Anything else (e.g. "unknown") is
 # skipped so the bot doesn't answer unrelated chatter.
 LAUNDRY_INTENTS = INTENTS - {"unknown"}
 
+# Cosine distance from search_knowledge (lower = more similar). Retrieved rows
+# above this are treated as "not enough context" and routed to the fallback.
+# Tune via env if the KB embeddings shift; 0.0 = identical, ~2.0 = opposite.
+RELEVANCE_THRESHOLD = float(os.getenv("AI_RELEVANCE_THRESHOLD", "0.8"))
+
 FALLBACK_REPLY = "Maaf kak, boleh dijelaskan lebih detail ya? Biar admin bantu cek 😊"
 
+# Prompts are written in English for clarity/maintainability; the *replies* the
+# model produces must stay in Bahasa Indonesia (enforced in ANSWER_SYSTEM).
 INTENT_PROMPT = (
-    "Klasifikasikan pesan pelanggan ke SATU label berikut: "
-    "ask_promo, ask_opening_hours, ask_service, complaint, ask_order_status, unknown. "
-    "Jawab HANYA dengan label, tanpa penjelasan.\n\nPesan: {message}"
+    "You are an intent classifier for a laundry business WhatsApp assistant.\n"
+    "Classify the customer message into EXACTLY ONE label:\n"
+    "- ask_promo: promotions, discounts, deals, prices, or rates.\n"
+    "- ask_opening_hours: operating hours, open/close times, when they can come.\n"
+    "- ask_service: what services exist (kiloan, satuan, antar-jemput, pengering, etc.).\n"
+    "- ask_order_status: status or progress of an existing order/laundry.\n"
+    "- complaint: a problem, dissatisfaction, or damaged/lost items.\n"
+    "- unknown: greetings, small talk, or anything unrelated to the laundry business.\n"
+    "Output ONLY the label in lowercase, with no punctuation or explanation.\n"
+    "If unsure or unrelated to laundry, output: unknown.\n\n"
+    "Message: {message}"
 )
 
 ANSWER_SYSTEM = (
-    "Kamu adalah admin laundry yang ramah dan sopan di WhatsApp. "
-    "Balas dalam Bahasa Indonesia dengan gaya santai, singkat, dan ramah. "
-    "Jawab HANYA berdasarkan KONTEKS di bawah. Jangan mengarang promo, harga, "
-    "cabang, atau status pesanan yang tidak ada di konteks. "
-    "Jika konteks tidak cukup untuk menjawab, minta pelanggan menjelaskan lebih detail "
-    "atau katakan admin akan bantu cek. "
-    "Untuk keluhan (complaint) dan status pesanan (ask_order_status), bersikap hati-hati: "
-    "bila data tidak cukup, minta detail tambahan atau sampaikan admin akan bantu cek."
+    "You are a friendly, polite laundry shop admin on WhatsApp.\n"
+    "ALWAYS reply to the customer in Bahasa Indonesia, in a casual, warm, concise tone.\n"
+    "Answer ONLY using the CONTEXT provided below. Never invent promos, prices, "
+    "branches, or order status that are not in the context.\n"
+    "If the context does not contain enough information to answer, do NOT guess: "
+    "reply in Bahasa Indonesia asking the customer for more detail, or say the admin "
+    "will help check.\n"
+    "For complaints and order-status questions, be careful: when data is insufficient, "
+    "ask for more detail or say the admin will follow up."
 )
 
 
@@ -85,7 +104,12 @@ def _llm_client() -> ChatOpenAI:
 def detect_intent(state: State) -> State:
     prompt = INTENT_PROMPT.format(message=state["customer_message"])
     raw = _llm_client().invoke(prompt).content.strip().lower()
-    return {"intent": raw if raw in INTENTS else "unknown"}
+    # Lenient: the model may wrap the label in quotes/extra words. Take the first
+    # known label that appears (specific labels before "unknown").
+    for label in INTENT_LABELS:
+        if label in raw:
+            return {"intent": label}
+    return {"intent": "unknown"}
 
 
 def route_after_intent(state: State) -> str:
@@ -99,10 +123,14 @@ def skip(state: State) -> State:
 
 def retrieve_context(state: State) -> State:
     docs = search_knowledge(state["customer_message"])
-    return {"documents": docs}
+    # Keep only rows close enough to count as real context; the rest are noise
+    # and would otherwise push the model to answer without grounding.
+    relevant = [d for d in docs if d["score"] <= RELEVANCE_THRESHOLD]
+    return {"documents": relevant}
 
 
 def route_after_retrieval(state: State) -> str:
+    # No relevant context -> fallback so the bot still replies, but safely.
     return "generate_answer" if state.get("documents") else "fallback"
 
 

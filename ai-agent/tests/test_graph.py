@@ -48,6 +48,27 @@ def test_route_after_retrieval():
     assert graph.route_after_retrieval({"documents": []}) == "fallback"
 
 
+def test_retrieve_context_drops_irrelevant(monkeypatch):
+    # score is cosine distance: 0.2 is close, 0.95 is far (above threshold).
+    docs = [
+        {"id": 1, "title": "a", "content": "x", "category": "c", "score": 0.2},
+        {"id": 2, "title": "b", "content": "y", "category": "c", "score": 0.95},
+    ]
+    monkeypatch.setattr(graph, "search_knowledge", lambda q, **k: docs)
+    monkeypatch.setattr(graph, "RELEVANCE_THRESHOLD", 0.8)
+    out = graph.retrieve_context({"customer_message": "promo?"})
+    assert out["documents"] == [docs[0]]
+
+
+def test_retrieve_context_all_irrelevant_triggers_fallback(monkeypatch):
+    docs = [{"id": 1, "title": "a", "content": "x", "category": "c", "score": 1.4}]
+    monkeypatch.setattr(graph, "search_knowledge", lambda q, **k: docs)
+    monkeypatch.setattr(graph, "RELEVANCE_THRESHOLD", 0.8)
+    out = graph.retrieve_context({"customer_message": "cuaca hari ini?"})
+    assert out["documents"] == []
+    assert graph.route_after_retrieval(out) == "fallback"
+
+
 def test_fallback_returns_polite_message():
     out = graph.fallback({"customer_message": "x"})
     assert out["answer"] == graph.FALLBACK_REPLY
