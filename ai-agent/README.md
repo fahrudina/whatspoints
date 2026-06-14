@@ -70,4 +70,16 @@ pgvector on every request.
 ## Endpoints
 
 - `GET /health` — liveness.
-- `POST /ai/reply` — generate a suggested reply (added in Phase 4).
+- `POST /ai/reply` — generate a suggested reply.
+
+### Intent gate
+
+Only laundry-related intents (`ask_promo`, `ask_opening_hours`, `ask_service`,
+`complaint`, `ask_order_status`) get a reply. Anything classified as `unknown`
+is skipped so the bot doesn't answer unrelated chatter. The response always
+includes `should_reply`; when it is `false`, `reply` is empty and the caller
+should not respond:
+
+```json
+{ "reply": "", "intent": "unknown", "should_reply": false, "sources": [] }
+```

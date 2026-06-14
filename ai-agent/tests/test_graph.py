@@ -29,6 +29,20 @@ def test_detect_intent_unknown_for_garbage(monkeypatch):
     assert graph.detect_intent({"customer_message": "??"}) == {"intent": "unknown"}
 
 
+def test_route_after_intent_skips_unrelated():
+    assert graph.route_after_intent({"intent": "ask_promo"}) == "retrieve_context"
+    assert graph.route_after_intent({"intent": "complaint"}) == "retrieve_context"
+    assert graph.route_after_intent({"intent": "unknown"}) == "skip"
+    assert graph.route_after_intent({}) == "skip"
+
+
+def test_skip_does_not_reply():
+    out = graph.skip({"customer_message": "hai bro apa kabar"})
+    assert out["should_reply"] is False
+    assert out["answer"] == ""
+    assert out["sources"] == []
+
+
 def test_route_after_retrieval():
     assert graph.route_after_retrieval({"documents": [{"id": 1}]}) == "generate_answer"
     assert graph.route_after_retrieval({"documents": []}) == "fallback"

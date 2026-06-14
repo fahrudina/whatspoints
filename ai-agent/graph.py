@@ -30,6 +30,10 @@ INTENTS = {
     "unknown",
 }
 
+# Only laundry-related intents get a reply. Anything else (e.g. "unknown") is
+# skipped so the bot doesn't answer unrelated chatter.
+LAUNDRY_INTENTS = INTENTS - {"unknown"}
+
 FALLBACK_REPLY = "Maaf kak, boleh dijelaskan lebih detail ya? Biar admin bantu cek 😊"
 
 INTENT_PROMPT = (
@@ -57,6 +61,7 @@ class State(TypedDict, total=False):
     documents: list
     answer: str
     sources: list
+    should_reply: bool
 
 
 _llm = None
@@ -78,6 +83,15 @@ def detect_intent(state: State) -> State:
     prompt = INTENT_PROMPT.format(message=state["customer_message"])
     raw = _llm_client().invoke(prompt).content.strip().lower()
     return {"intent": raw if raw in INTENTS else "unknown"}
+
+
+def route_after_intent(state: State) -> str:
+    # Stop here for unrelated messages so the bot doesn't reply to everything.
+    return "retrieve_context" if state.get("intent") in LAUNDRY_INTENTS else "skip"
+
+
+def skip(state: State) -> State:
+    return {"answer": "", "sources": [], "should_reply": False}
 
 
 def retrieve_context(state: State) -> State:
@@ -111,17 +125,23 @@ def fallback(state: State) -> State:
 def build_graph():
     g = StateGraph(State)
     g.add_node("detect_intent", detect_intent)
+    g.add_node("skip", skip)
     g.add_node("retrieve_context", retrieve_context)
     g.add_node("generate_answer", generate_answer)
     g.add_node("fallback", fallback)
 
     g.add_edge(START, "detect_intent")
-    g.add_edge("detect_intent", "retrieve_context")
+    g.add_conditional_edges(
+        "detect_intent",
+        route_after_intent,
+        {"retrieve_context": "retrieve_context", "skip": "skip"},
+    )
     g.add_conditional_edges(
         "retrieve_context",
         route_after_retrieval,
         {"generate_answer": "generate_answer", "fallback": "fallback"},
     )
+    g.add_edge("skip", END)
     g.add_edge("generate_answer", END)
     g.add_edge("fallback", END)
     return g.compile()
@@ -142,4 +162,6 @@ def generate_reply(customer_message: str, phone_number: str = "") -> dict:
         "reply": result.get("answer", FALLBACK_REPLY),
         "intent": result.get("intent", "unknown"),
         "sources": result.get("sources", []),
+        # False = unrelated message, caller should not reply.
+        "should_reply": result.get("should_reply", True),
     }

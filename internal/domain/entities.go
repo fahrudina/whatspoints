@@ -77,10 +77,13 @@ type AIReplyRequest struct {
 }
 
 // AIReplyResponse is a suggested reply produced by the AI sidecar.
+// ShouldReply is false when the message is not laundry-related, signalling the
+// caller to skip replying (Reply is empty in that case).
 type AIReplyResponse struct {
-	Reply   string     `json:"reply"`
-	Intent  string     `json:"intent"`
-	Sources []AISource `json:"sources,omitempty"`
+	Reply       string     `json:"reply"`
+	Intent      string     `json:"intent"`
+	ShouldReply bool       `json:"should_reply"`
+	Sources     []AISource `json:"sources,omitempty"`
 }
 
 // AISource is a knowledge-base document the AI used to ground its reply.
