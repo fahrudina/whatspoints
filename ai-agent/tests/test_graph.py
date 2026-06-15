@@ -29,6 +29,12 @@ def test_detect_intent_unknown_for_garbage(monkeypatch):
     assert graph.detect_intent({"customer_message": "??"}) == {"intent": "unknown"}
 
 
+def test_detect_intent_picks_earliest_label(monkeypatch):
+    # When several labels appear, the one stated first textually wins.
+    monkeypatch.setattr(graph, "_llm", _FakeLLM("ask_service then maybe ask_promo"))
+    assert graph.detect_intent({"customer_message": "x"}) == {"intent": "ask_service"}
+
+
 def test_route_after_intent_skips_unrelated():
     assert graph.route_after_intent({"intent": "ask_promo"}) == "retrieve_context"
     assert graph.route_after_intent({"intent": "complaint"}) == "retrieve_context"

@@ -118,12 +118,15 @@ def detect_intent(state: State) -> State:
         message=state["customer_message"],
     )
     raw = _llm_client().invoke(prompt).content.strip().lower()
-    # Lenient: the model may wrap the label in quotes/extra words. Take the first
-    # known label that appears (specific labels before "unknown").
+    # Lenient: the model may wrap the label in quotes/extra words. Pick the label
+    # that appears earliest in the output (textual order, not list priority) so a
+    # response mentioning several labels resolves to the one stated first.
+    best = None
     for label in INTENT_LABELS:
-        if label in raw:
-            return {"intent": label}
-    return {"intent": "unknown"}
+        idx = raw.find(label)
+        if idx != -1 and (best is None or idx < best[0]):
+            best = (idx, label)
+    return {"intent": best[1] if best else "unknown"}
 
 
 def route_after_intent(state: State) -> str:

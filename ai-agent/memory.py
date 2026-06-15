@@ -10,10 +10,19 @@ import threading
 import time
 from collections import OrderedDict, deque
 
+
+def _env_num(name: str, default, cast, min_value):
+    # Fall back to default on junk, clamp to min so we never crash deque(maxlen).
+    try:
+        return max(cast(os.getenv(name, default)), min_value)
+    except (TypeError, ValueError):
+        return default
+
+
 # Keep the last N exchanges (each = one user + one assistant message).
-_MAX_TURNS = int(os.getenv("HISTORY_TURNS", "5")) * 2
-_TTL = float(os.getenv("HISTORY_TTL_SECONDS", "1800"))  # 30 min idle -> forget
-_MAX_CONVERSATIONS = int(os.getenv("HISTORY_MAX_CONVERSATIONS", "1000"))
+_MAX_TURNS = _env_num("HISTORY_TURNS", 5, int, 1) * 2
+_TTL = _env_num("HISTORY_TTL_SECONDS", 1800.0, float, 0.0)  # 30 min idle -> forget
+_MAX_CONVERSATIONS = _env_num("HISTORY_MAX_CONVERSATIONS", 1000, int, 1)
 
 _lock = threading.Lock()
 # phone -> {"turns": deque[(role, text)], "ts": last_activity_epoch}
