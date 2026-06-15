@@ -30,6 +30,39 @@ var (
 // the cap if a busy account legitimately needs more in-flight replies.
 var aiSem = make(chan struct{}, 8)
 
+// whatsmeow can deliver the same message event more than once (sender retries /
+// re-delivery), which would double every reply. Track recently-seen message IDs
+// and process each at most once.
+var (
+	seenMu     sync.Mutex
+	seenIDs    = make(map[string]time.Time)
+	seenTTL    = 5 * time.Minute
+	seenMaxLen = 2000
+)
+
+// markSeen records id and returns true if it's new (should be processed), false
+// if it's a duplicate. Empty ids can't be deduped, so they're always processed.
+func markSeen(id string) bool {
+	if id == "" {
+		return true
+	}
+	seenMu.Lock()
+	defer seenMu.Unlock()
+	if _, dup := seenIDs[id]; dup {
+		return false
+	}
+	now := time.Now()
+	if len(seenIDs) >= seenMaxLen { // opportunistic cleanup of expired entries
+		for k, t := range seenIDs {
+			if now.Sub(t) > seenTTL {
+				delete(seenIDs, k)
+			}
+		}
+	}
+	seenIDs[id] = now
+	return true
+}
+
 func getAIClient() *infrastructure.AIClient {
 	aiOnce.Do(func() {
 		cfg := config.LoadAIConfig()
@@ -41,6 +74,11 @@ func getAIClient() *infrastructure.AIClient {
 }
 
 func HandleMessageEvent(v *events.Message, db *sql.DB, client *whatsmeow.Client) {
+	if !markSeen(v.Info.ID) {
+		fmt.Printf("Duplicate message %s from %s skipped\n", v.Info.ID, v.Info.Sender.String())
+		return
+	}
+
 	var msgText string
 	if v.Message.GetExtendedTextMessage().GetText() != "" {
 		msgText = v.Message.GetExtendedTextMessage().GetText()
