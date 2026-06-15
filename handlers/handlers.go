@@ -25,6 +25,11 @@ var (
 	aiClient *infrastructure.AIClient
 )
 
+// Caps concurrent AI reply jobs so a burst (or a hung sidecar holding the 15s
+// timeout) can't spawn unbounded goroutines. ponytail: fixed semaphore; raise
+// the cap if a busy account legitimately needs more in-flight replies.
+var aiSem = make(chan struct{}, 8)
+
 func getAIClient() *infrastructure.AIClient {
 	aiOnce.Do(func() {
 		cfg := config.LoadAIConfig()
@@ -71,8 +76,18 @@ func HandleMessageEvent(v *events.Message, db *sql.DB, client *whatsmeow.Client)
 		} else if msgText == "help" {
 			sendHelpMessage(v, client)
 		} else {
-			// ponytail: goroutine so the 15s AI call never blocks the whatsmeow read loop.
-			go handleAIReply(v, client, msgText)
+			// Goroutine so the 15s AI call never blocks the whatsmeow read loop,
+			// bounded by aiSem. Non-blocking acquire: at capacity we skip the
+			// reply rather than block the loop or pile up goroutines.
+			select {
+			case aiSem <- struct{}{}:
+				go func() {
+					defer func() { <-aiSem }()
+					handleAIReply(v, client, msgText)
+				}()
+			default:
+				fmt.Printf("AI reply skipped (at capacity) for %s\n", v.Info.Sender.String())
+			}
 		}
 	}
 }
