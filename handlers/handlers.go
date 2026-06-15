@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/wa-serv/config"
+	"github.com/wa-serv/internal/infrastructure"
 	"github.com/wa-serv/processor"
 	"github.com/wa-serv/s3uploader"
 	"go.mau.fi/whatsmeow"
@@ -16,7 +19,66 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// AI sidecar client, built once from env. nil when AI auto-send is disabled.
+var (
+	aiOnce   sync.Once
+	aiClient *infrastructure.AIClient
+)
+
+// Caps concurrent AI reply jobs so a burst (or a hung sidecar holding the 15s
+// timeout) can't spawn unbounded goroutines. ponytail: fixed semaphore; raise
+// the cap if a busy account legitimately needs more in-flight replies.
+var aiSem = make(chan struct{}, 8)
+
+// whatsmeow can deliver the same message event more than once (sender retries /
+// re-delivery), which would double every reply. Track recently-seen message IDs
+// and process each at most once.
+var (
+	seenMu     sync.Mutex
+	seenIDs    = make(map[string]time.Time)
+	seenTTL    = 5 * time.Minute
+	seenMaxLen = 2000
+)
+
+// markSeen records id and returns true if it's new (should be processed), false
+// if it's a duplicate. Empty ids can't be deduped, so they're always processed.
+func markSeen(id string) bool {
+	if id == "" {
+		return true
+	}
+	seenMu.Lock()
+	defer seenMu.Unlock()
+	if _, dup := seenIDs[id]; dup {
+		return false
+	}
+	now := time.Now()
+	if len(seenIDs) >= seenMaxLen { // opportunistic cleanup of expired entries
+		for k, t := range seenIDs {
+			if now.Sub(t) > seenTTL {
+				delete(seenIDs, k)
+			}
+		}
+	}
+	seenIDs[id] = now
+	return true
+}
+
+func getAIClient() *infrastructure.AIClient {
+	aiOnce.Do(func() {
+		cfg := config.LoadAIConfig()
+		if cfg.Enabled && cfg.AutoSend {
+			aiClient = infrastructure.NewAIClient(cfg.ServiceURL)
+		}
+	})
+	return aiClient
+}
+
 func HandleMessageEvent(v *events.Message, db *sql.DB, client *whatsmeow.Client) {
+	if !markSeen(v.Info.ID) {
+		fmt.Printf("Duplicate message %s from %s skipped\n", v.Info.ID, v.Info.Sender.String())
+		return
+	}
+
 	var msgText string
 	if v.Message.GetExtendedTextMessage().GetText() != "" {
 		msgText = v.Message.GetExtendedTextMessage().GetText()
@@ -51,7 +113,52 @@ func HandleMessageEvent(v *events.Message, db *sql.DB, client *whatsmeow.Client)
 			replyToMessage(v, client)
 		} else if msgText == "help" {
 			sendHelpMessage(v, client)
+		} else {
+			// Goroutine so the 15s AI call never blocks the whatsmeow read loop,
+			// bounded by aiSem. Non-blocking acquire: at capacity we skip the
+			// reply rather than block the loop or pile up goroutines.
+			select {
+			case aiSem <- struct{}{}:
+				go func() {
+					defer func() { <-aiSem }()
+					handleAIReply(v, client, msgText)
+				}()
+			default:
+				fmt.Printf("AI reply skipped (at capacity) for %s\n", v.Info.Sender.String())
+			}
 		}
+	}
+}
+
+// handleAIReply asks the AI sidecar for a suggested reply and sends it when the
+// message is laundry-related (ShouldReply). No-op when AI auto-send is disabled.
+func handleAIReply(evt *events.Message, client *whatsmeow.Client, msgText string) {
+	ai := getAIClient()
+	// IsFromMe guard: never let the bot reply to its own outgoing messages.
+	if ai == nil || evt.Info.IsFromMe || strings.TrimSpace(msgText) == "" {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	resp, err := ai.GenerateReply(ctx, msgText, evt.Info.Sender.String())
+	if err != nil {
+		fmt.Printf("AI reply error: %v\n", err)
+		return
+	}
+	if !resp.ShouldReply || strings.TrimSpace(resp.Reply) == "" {
+		return // not laundry-related — skip, don't reply
+	}
+
+	// Bounded deadline so a stalled WhatsApp client can't hang this goroutine
+	// (and hold a semaphore slot) forever.
+	sendCtx, sendCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer sendCancel()
+
+	msg := &waProto.Message{Conversation: proto.String(resp.Reply)}
+	if _, err := client.SendMessage(sendCtx, evt.Info.Sender, msg); err != nil {
+		fmt.Printf("Failed to send AI reply: %v\n", err)
 	}
 }
 

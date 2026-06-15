@@ -15,6 +15,7 @@ from typing import TypedDict
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 
+import memory
 from embedding import search_knowledge
 
 logger = logging.getLogger(__name__)
@@ -24,47 +25,84 @@ logger = logging.getLogger(__name__)
 CHAT_MODEL = os.getenv("AI_MODEL", "openai/gpt-4o-mini")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1")
 
-INTENTS = {
-    "ask_promo",
+# Match order matters: check specific labels before "unknown" when parsing the
+# model's (possibly messy) output. A list, not a set, so iteration is stable.
+INTENT_LABELS = [
+    "ask_order_status",
     "ask_opening_hours",
+    "ask_promo",
     "ask_service",
     "complaint",
-    "ask_order_status",
     "unknown",
-}
+]
+INTENTS = set(INTENT_LABELS)
 
 # Only laundry-related intents get a reply. Anything else (e.g. "unknown") is
 # skipped so the bot doesn't answer unrelated chatter.
 LAUNDRY_INTENTS = INTENTS - {"unknown"}
 
+# Cosine distance from search_knowledge (lower = more similar). Retrieved rows
+# above this are treated as "not enough context" and routed to the fallback.
+# Tune via env if the KB embeddings shift; 0.0 = identical, ~2.0 = opposite.
+RELEVANCE_THRESHOLD = float(os.getenv("AI_RELEVANCE_THRESHOLD", "0.8"))
+
 FALLBACK_REPLY = "Maaf kak, boleh dijelaskan lebih detail ya? Biar admin bantu cek 😊"
 
+# Prompts are written in English for clarity/maintainability; the *replies* the
+# model produces must stay in Bahasa Indonesia (enforced in ANSWER_SYSTEM).
 INTENT_PROMPT = (
-    "Klasifikasikan pesan pelanggan ke SATU label berikut: "
-    "ask_promo, ask_opening_hours, ask_service, complaint, ask_order_status, unknown. "
-    "Jawab HANYA dengan label, tanpa penjelasan.\n\nPesan: {message}"
+    "You are an intent classifier for a laundry business WhatsApp assistant.\n"
+    "Classify the LATEST customer message into EXACTLY ONE label:\n"
+    "- ask_promo: promotions, discounts, deals, prices, or rates.\n"
+    "- ask_opening_hours: operating hours, open/close times, when they can come.\n"
+    "- ask_service: what services exist (kiloan, satuan, antar-jemput, pengering, etc.).\n"
+    "- ask_order_status: status or progress of an existing order/laundry.\n"
+    "- complaint: a problem, dissatisfaction, or damaged/lost items.\n"
+    "- unknown: greetings, small talk, or anything unrelated to the laundry business.\n"
+    "Use the recent conversation ONLY to resolve short follow-ups (e.g. 'iya',\n"
+    "'berapa lama?', 'yang itu'): inherit the topic the customer is continuing.\n"
+    "Output ONLY the label in lowercase, with no punctuation or explanation.\n"
+    "If unsure or unrelated to laundry, output: unknown.\n\n"
+    "Recent conversation:\n{history}\n\n"
+    "Latest message: {message}"
 )
 
 ANSWER_SYSTEM = (
-    "Kamu adalah admin laundry yang ramah dan sopan di WhatsApp. "
-    "Balas dalam Bahasa Indonesia dengan gaya santai, singkat, dan ramah. "
-    "Jawab HANYA berdasarkan KONTEKS di bawah. Jangan mengarang promo, harga, "
-    "cabang, atau status pesanan yang tidak ada di konteks. "
-    "Jika konteks tidak cukup untuk menjawab, minta pelanggan menjelaskan lebih detail "
-    "atau katakan admin akan bantu cek. "
-    "Untuk keluhan (complaint) dan status pesanan (ask_order_status), bersikap hati-hati: "
-    "bila data tidak cukup, minta detail tambahan atau sampaikan admin akan bantu cek."
+    "You are a friendly laundry shop admin chatting with a customer on WhatsApp.\n"
+    "Reply in Bahasa Indonesia with a natural, warm, conversational tone — like a "
+    "real person texting, not a form letter.\n"
+    "Use ALL the relevant details in the CONTEXT to answer fully. When the customer "
+    "asks about prices or a price list, list the specific items and prices found in "
+    "the context (not just the promo); if there are many, give the ones they asked "
+    "about and mention more are available. Never invent prices, promos, branches, or "
+    "order status that are not in the context.\n"
+    "End your message right after the actual answer. NEVER append a generic "
+    "closing or offer-to-help sentence. Specifically, do not use phrases like "
+    "'Ada yang bisa saya bantu lagi?', 'Kalau ada yang ingin ditanyakan lebih "
+    "lanjut, silakan', 'jangan ragu untuk bertanya', or 'semoga membantu'. Only "
+    "ask a follow-up question when you genuinely need information to help.\n"
+    "If the context truly does not contain the answer, say so honestly and offer to "
+    "have the admin check — do not guess.\n"
+    "For complaints or order-status questions with insufficient data, ask for the "
+    "specific detail you need (e.g. order id or name)."
 )
 
 
 class State(TypedDict, total=False):
     customer_message: str
     phone_number: str
+    history: list  # [(role, text), ...] prior turns for this phone number
     intent: str
     documents: list
     answer: str
     sources: list
     should_reply: bool
+
+
+def _format_history(history: list) -> str:
+    if not history:
+        return "(none)"
+    return "\n".join(f"{role}: {text}" for role, text in history)
 
 
 _llm = None
@@ -77,15 +115,27 @@ def _llm_client() -> ChatOpenAI:
             model=CHAT_MODEL,
             base_url=LLM_BASE_URL,
             api_key=os.getenv("LLM_API_KEY") or os.getenv("OPENROUTER_API_KEY"),
-            temperature=0.3,
+            # A bit warmer so replies vary instead of repeating a canned sign-off.
+            temperature=float(os.getenv("AI_TEMPERATURE", "0.6")),
         )
     return _llm
 
 
 def detect_intent(state: State) -> State:
-    prompt = INTENT_PROMPT.format(message=state["customer_message"])
+    prompt = INTENT_PROMPT.format(
+        history=_format_history(state.get("history")),
+        message=state["customer_message"],
+    )
     raw = _llm_client().invoke(prompt).content.strip().lower()
-    return {"intent": raw if raw in INTENTS else "unknown"}
+    # Lenient: the model may wrap the label in quotes/extra words. Pick the label
+    # that appears earliest in the output (textual order, not list priority) so a
+    # response mentioning several labels resolves to the one stated first.
+    best = None
+    for label in INTENT_LABELS:
+        idx = raw.find(label)
+        if idx != -1 and (best is None or idx < best[0]):
+            best = (idx, label)
+    return {"intent": best[1] if best else "unknown"}
 
 
 def route_after_intent(state: State) -> str:
@@ -99,10 +149,14 @@ def skip(state: State) -> State:
 
 def retrieve_context(state: State) -> State:
     docs = search_knowledge(state["customer_message"])
-    return {"documents": docs}
+    # Keep only rows close enough to count as real context; the rest are noise
+    # and would otherwise push the model to answer without grounding.
+    relevant = [d for d in docs if d["score"] <= RELEVANCE_THRESHOLD]
+    return {"documents": relevant}
 
 
 def route_after_retrieval(state: State) -> str:
+    # No relevant context -> fallback so the bot still replies, but safely.
     return "generate_answer" if state.get("documents") else "fallback"
 
 
@@ -111,6 +165,8 @@ def generate_answer(state: State) -> State:
     context = "\n".join(f"- {d['title']}: {d['content']}" for d in docs)
     messages = [
         ("system", ANSWER_SYSTEM),
+        # Prior turns give the model continuity; roles map to human/ai messages.
+        *(state.get("history") or []),
         (
             "user",
             f"Intent: {state.get('intent')}\n\nKONTEKS:\n{context}\n\n"
@@ -164,15 +220,25 @@ def generate_reply(customer_message: str, phone_number: str = "") -> dict:
         _graph = build_graph()
     try:
         result = _graph.invoke(
-            {"customer_message": customer_message, "phone_number": phone_number}
+            {
+                "customer_message": customer_message,
+                "phone_number": phone_number,
+                "history": memory.get_history(phone_number),
+            }
         )
     except Exception:
         logger.exception("AI graph failed; returning no-reply")
         return {"reply": "", "intent": "unknown", "should_reply": False, "sources": []}
+
+    reply = result.get("answer", FALLBACK_REPLY)
+    should_reply = result.get("should_reply", True)  # False = unrelated, skip.
+    # Only remember exchanges we actually replied to, so skipped/off-topic
+    # chatter doesn't pollute the conversation context.
+    if should_reply and reply.strip():
+        memory.append(phone_number, customer_message, reply)
     return {
-        "reply": result.get("answer", FALLBACK_REPLY),
+        "reply": reply,
         "intent": result.get("intent", "unknown"),
         "sources": result.get("sources", []),
-        # False = unrelated message, caller should not reply.
-        "should_reply": result.get("should_reply", True),
+        "should_reply": should_reply,
     }

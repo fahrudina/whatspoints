@@ -57,7 +57,7 @@ func LoadEnv() {
 // AIConfig holds configuration for the optional AI reply-suggestion feature.
 type AIConfig struct {
 	Enabled    bool
-	AutoSend   bool // reserved for future use; auto-send is not implemented
+	AutoSend   bool // auto-send AI replies on WhatsApp; takes effect only when Enabled is also true
 	ServiceURL string
 }
 

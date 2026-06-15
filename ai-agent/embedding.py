@@ -13,7 +13,10 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 # EMBED_DIM in sync with the schema if you change the model.
 EMBED_MODEL = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-001")
 EMBED_DIM = int(os.getenv("EMBEDDING_DIM", "1536"))
-TOP_K = 3
+# Wider recall so multi-chunk answers (e.g. a pricelist split across rows) come
+# back whole instead of just the top promo chunk. The relevance gate in graph.py
+# still drops anything too far, so extra slots only help when context exists.
+TOP_K = int(os.getenv("RETRIEVAL_TOP_K", "8"))
 
 _embeddings = None
 
