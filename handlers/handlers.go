@@ -113,8 +113,13 @@ func handleAIReply(evt *events.Message, client *whatsmeow.Client, msgText string
 		return // not laundry-related — skip, don't reply
 	}
 
+	// Bounded deadline so a stalled WhatsApp client can't hang this goroutine
+	// (and hold a semaphore slot) forever.
+	sendCtx, sendCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer sendCancel()
+
 	msg := &waProto.Message{Conversation: proto.String(resp.Reply)}
-	if _, err := client.SendMessage(context.Background(), evt.Info.Sender, msg); err != nil {
+	if _, err := client.SendMessage(sendCtx, evt.Info.Sender, msg); err != nil {
 		fmt.Printf("Failed to send AI reply: %v\n", err)
 	}
 }
